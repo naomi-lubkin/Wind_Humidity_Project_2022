@@ -1,0 +1,318 @@
+---
+title: "Wind_Data_NL"
+output: html_document
+date: '2022-06-01'
+---
+#set up and loading packages, setting working directory
+```{r setup, include=FALSE}
+#install.packages("tidyverse")
+#install.packages("here")
+#install.packages("tibbletime")
+#install.packages("openair")
+#install.packages("climaemet")
+#install.packages("reshape2")
+#install.packages("mblm")
+#install.packages("trends")
+#install.packages("zyp")
+#install.packages("robslopes")
+
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(lubridate)
+library(dplyr)
+#library(tibbletime)
+library(openair)
+#library(climaemet)
+library(reshape2)
+library(mblm)
+
+library(robslopes)
+
+
+```
+#loading in data
+```{r}
+#b16 peak daily gust speed and direction, jan 1935-dec 2021
+peak_gust_dir <- read_csv(here("Data", "b16-peak gust speed and dir 1935-2021.csv"))
+
+#b16 daily wind speed summary, jan 1935- dec 2021
+daily_sum <- read_csv(here("Data", "b16 daily wind sum 1935-2021.csv"))
+
+#b16 hourly present weather, split by code, jan 1935-dec 2021
+#likely needs cleaning
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+
+#b16 synoptic data jan 1935-dec 2021
+#3x daily dry bulb temp, wet bulb temp, pressure, and precipitation
+synoptic <- read_csv(here("Data", "b16 synoptic data 1935-2021.csv"))
+
+#b16 hourly daily wind speed, jan 1935-dec2021
+hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv")) 
+
+
+#b16 daily average wind speed (from hourly averages), jan 1935- dec 2021
+daily_avg <-read_csv(here("Data", "b16-hourly daily wind average 1935-2021.csv")) 
+         
+         
+#b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
+monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
+
+#Switiching data type from character to numeric, rounding to 1 decimal to match B16 values
+#Note: NAs introduced when switching data type to numeric were "NULL" in original dataset
+
+#b16 yearly average wind speed (from hourly averages), jan 1935- dec 2021
+yearly_avg <-read_csv(here("Data", "b16-hourly yearly wind average 1935-2021.csv"))
+
+#check with Keith/get some metadata for this one
+stage_office_peak_5_sec_gusts <- read_csv(here("Data", "ft-tech-stage office peak 5 sec gusts.csv"))
+
+hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
+
+
+```
+#Cleaning data
+```{r}
+#Switiching data type from character to numeric, rounding to 1 decimal to match B16 values
+#Note: NAs introduced in daily when switching data type to numeric were "NULL" in original dataset
+daily_avg <- daily_avg %>%
+  mutate(daily_avg_speed = as.numeric(daily_avg_speed), 
+         daily_avg_spd = round(daily_avg_speed, digits = 1))
+
+monthly_avg <- monthly_avg %>%
+  mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
+         monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
+         date = as.Date(date))
+
+yearly_avg <- yearly_avg %>%
+  mutate(year_avg_speed = as.numeric(year_avg_speed), 
+         year_avg_spd = round(year_avg_speed, digits = 1), 
+         year = year(date), 
+         year = as.numeric(year), 
+         group = case_when (year <= 1940 ~ "1", 
+                            year %in% 1941:1980 ~ "2", 
+                            year >= 1981 ~ "3", 
+                            TRUE ~ NA_character_))
+
+hourly_spd_dir_rose <- hourly_spd_dir %>%
+  #select(wind_speed, wind_direction) %>%
+  mutate(wind_speed = as.numeric(wind_speed), 
+         wind_direction = as.character(wind_direction)) %>%
+  mutate(simple_direction =  case_when( wind_direction == "WSW" ~ "SW", 
+                                        wind_direction == "WNW" ~ "NW", 
+                                        wind_direction == "NNW" ~ "NW",
+                                        wind_direction == "NNE" ~ "NE",
+                                        wind_direction == "ENE" ~ "NE",
+                                        wind_direction == "ESE" ~ "SE",
+                                        wind_direction == "SSE" ~ "SE",
+                                        wind_direction == "SSW" ~ "SW", 
+                                        wind_direction == "N" ~ "N",
+                                        wind_direction == "NE" ~ "NE",
+                                        wind_direction == "E" ~ "E",
+                                        wind_direction == "SE" ~ "SE",
+                                        wind_direction == "S" ~ "S",
+                                        wind_direction == "SW" ~ "SW",
+                                        wind_direction == "W" ~ "W",
+                                        wind_direction == "NW" ~ "NW")) %>%
+  mutate(dir_deg = case_when(simple_direction == "N" ~ 0,
+                             simple_direction == "NE" ~ 45,
+                             simple_direction== "E" ~ 90,
+                             simple_direction== "SE" ~ 135,
+                            simple_direction == "S" ~ 180,
+                             simple_direction== "SW" ~ 225,
+                             simple_direction== "W" ~ 270,
+                            simple_direction== "NW" ~ 315)) %>%
+  mutate(wind_speed = as.numeric(wind_speed), 
+         dir_deg = as.numeric(dir_deg)) %>%
+  drop_na() %>%
+  mutate(year = year(date))
+  
+                                       
+
+#wind speeds/directions 1981-2021
+#hourly
+hourly_spd_dir_byyear <- hourly_spd_dir_rose %>%
+  mutate(era = case_when (year <= 1940 ~ "1935-1940", 
+                            year %in% 1941:1980 ~ "1941-1980", 
+                            year >= 1981 ~ "1981-2021", 
+                            TRUE ~ NA_character_))
+
+hourly_since_1981 <- hourly_spd_dir_byyear %>%
+  filter(year >= 1981) %>%
+  mutate(date= as.numeric(date))
+
+#monthly 
+monthly_spd_dir_byyear <- hourly_spd_dir_rose %>%
+  mutate(era = case_when (year <= 1940 ~ "1935-1940", 
+                            year %in% 1941:1980 ~ "1941-1980", 
+                            year >= 1981 ~ "1981-2021", 
+                            TRUE ~ NA_character_))
+
+hourly_since_1981 <- hourly_spd_dir_byyear %>%
+  filter(year >= 1981) %>%
+  mutate(date= as.numeric(date))
+
+#yearly data by year so theil-sen slopes are easier to calculate
+yearly_pre41 <- yearly_avg %>%
+  filter(year<=1940) %>%
+  mutate(date=as.Date(date), 
+         year_avg_spd=as.numeric(year_avg_spd))
+yearly_41to80 <-yearly_avg %>%
+  filter(year %in% 1941:1980) %>%
+  mutate(date=as.Date(date), 
+         year_avg_spd=as.numeric(year_avg_spd))
+yearly_since81 <- yearly_avg %>%
+  filter(year>=1981) %>%
+  mutate(date=as.Date(date), 
+         year_avg_spd=as.numeric(year_avg_spd))
+
+#for Theil Sen
+monthly_winter <- seasonal_winds %>%
+  filter(season == "Winter", 
+         year>=1981) %>%
+  floor_date(date, "decade")
+
+monthly_spring <- seasonal_winds %>%
+  filter(season == "Spring", 
+         year>=1981)
+
+monthly_summer <- seasonal_winds %>%
+  filter(season == "Summer", 
+         year>=1981)
+
+monthly_fall <- seasonal_winds %>%
+  filter(season == "Fall", 
+         year>=1981)
+monthly_since81 <- seasonal_winds %>%
+  filter(year>= 1981)
+
+monthly_81to13 <- monthly_since81 %>%
+  filter(year<=2013)
+
+  
+```
+
+#Seasonal Data
+```{r}
+seasonal_winds <- monthly_avg %>%
+  mutate(year = year(date), month=month(date), 
+         year = as.numeric(year), 
+         month = as.numeric(month), 
+         season = case_when(
+           month == 12 ~ "Winter",
+            month == 1 ~ "Winter",
+            month == 2 ~ "Winter",
+           month == 3 ~ "Spring",
+           month == 4 ~ "Spring",
+           month == 5 ~ "Spring",
+           month == 6 ~ "Summer",
+           month == 7 ~ "Summer",
+           month == 8 ~ "Summer",
+           month == 9 ~ "Fall",
+           month == 10 ~ "Fall",
+           month == 11~ "Fall",
+           TRUE ~ NA_character_)) %>%
+  mutate(monthly_spd_ms = monthly_avg_spd*0.44704)
+        
+
+view(seasonal_winds)
+```
+
+#Plotting
+```{r}
+
+  
+monthlyavg_season_plot <- ggplot(seasonal_winds, aes (x = year, y=monthly_avg_spd, colour = season)) + 
+  geom_point() +
+  geom_smooth(se=FALSE, method = 'loess')+
+  labs( x = 'Year', y = 'Wind Speed (mph)') + 
+  ggtitle("MWO Annual Wind Averages by Season") +
+  theme_minimal() +
+  ylim (0, 50) +
+  xlim(1981, 2021)
+
+monthlyavg_season_plot
+
+# Annual wind averages 1935-2021 , with linear regression lines fitted to each period of wind observations (Figure 17 in Cronin)
+#NOTE: need to do linear regression significance tests on these lines! 
+annual_avg_plot <- yearly_avg %>%
+  ggplot(aes (x = year, 
+              y = year_avg_spd, 
+              colour = group)) +
+  geom_point (show.legend = FALSE) +
+  geom_line(show.legend = FALSE)+
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+  ylim(0,50) +
+  xlim(1935, 2021) +
+  theme_minimal() +
+  ggtitle ("MWO Annual Wind Averages 1935-2021") +
+  labs (x= "Year", y = "Wind Speed (mph)")
+  
+annual_avg_plot
+
+
+
+#ggwindrose(wind_speed, wind_direction, n_directions = 8)
+stage_office_clean <- melt(stage_office_peak_5_sec_gusts, id.vars = 'date', variable.name = 'series')
+stage_office_plot <- stage_office_clean %>%
+  ggplot(aes(x= date,
+             y = value)) +
+  geom_line(aes(colour = series))
+stage_office_plot
+
+
+
+
+#Attempt at wind rose
+initial_wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir_deg", ws="wind_speed", type = "era", paddle= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60))
+
+
+initial_wind_rose
+
+seasonal_plot <- seasonal_winds %>%
+  ggplot(aes(x = year, 
+             y = monthly_avg_spd)) +
+  geom_line(aes(colour = season)) +
+  ylim(0, 70)
+
+seasonal_plot
+
+winter_plot <- monthly_winter %>%
+  ggplot(aes(x = year, 
+             y = monthly_avg_spd)) +
+  geom_point(colour = "blue") +
+  ylim(0,70) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("Winter (DJF) Wind Speeds 1981-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+winter_plot
+
+Sspring_plot <- monthly_spring %>%
+  ggplot(aes(x = year, 
+             y = monthly_avg_spd)) +
+  geom_point(colour = "purple") +
+  ylim(0,70) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("Spring (MAM) Wind Speeds 1981-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+  
+
+spring_plot
+```
+#Stats!
+```{r}
+#Theil-Sen slope analysis 
+winter.sen <- TheilSen(monthly_winter$year, monthly_winter$monthly_spd_ms)
+spring.sen <- TheilSen(monthly_spring$year, monthly_spring$monthly_spd_ms)
+summer.sen <-TheilSen(monthly_summer$year, monthly_summer$monthly_spd_ms)
+fall.sen <-TheilSen(monthly_fall$year, monthly_fall$monthly_spd_ms)
+annual.sen <-TheilSen(monthly_since81$year, monthly_since81$monthly_spd_ms)
+sen.81to13 <- TheilSen(monthly_81to13$year, monthly_81to13$monthly_spd_ms)
+ 
+```
+
