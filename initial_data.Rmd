@@ -96,6 +96,7 @@ yearly_avg <- yearly_avg %>%
                             year >= 1981 ~ "3", 
                             TRUE ~ NA_character_))
 
+#for wind rose
 hourly_spd_dir_rose <- hourly_spd_dir %>%
   #select(wind_speed, wind_direction) %>%
   mutate(wind_speed = as.numeric(wind_speed), 
@@ -171,8 +172,7 @@ yearly_since81 <- yearly_avg %>%
 #for Theil Sen
 monthly_winter <- seasonal_winds %>%
   filter(season == "Winter", 
-         year>=1981) %>%
-  floor_date(date, "decade")
+         year>=1981) 
 
 monthly_spring <- seasonal_winds %>%
   filter(season == "Spring", 
@@ -191,6 +191,20 @@ monthly_since81 <- seasonal_winds %>%
 monthly_81to13 <- monthly_since81 %>%
   filter(year<=2013)
 
+#for additive time series analysis
+monthly_avg_decomp <- monthly_avg %>%
+  mutate (year = year(date), 
+          month = month(date)) %>%
+  select(year, month, monthly_avg_spd)
+monthly_avg_decomp <- ts(monthly_avg_decomp$monthly_avg_spd, frequency=12)
+decomp <- decompose(monthly_avg_decomp)
+plot(decomp)
+
+monthly_decomp_81 <- monthly_since81 %>%
+  select(year, month, monthly_avg_spd)
+monthly_decomp_81 <- ts(monthly_decomp_81$monthly_avg_spd, frequency=12)
+decomp81 <- decompose(monthly_decomp_81)
+plot(decomp81)
   
 ```
 
@@ -314,5 +328,12 @@ fall.sen <-TheilSen(monthly_fall$year, monthly_fall$monthly_spd_ms)
 annual.sen <-TheilSen(monthly_since81$year, monthly_since81$monthly_spd_ms)
 sen.81to13 <- TheilSen(monthly_81to13$year, monthly_81to13$monthly_spd_ms)
  
+
+#Linear regression of seasonal data
+winter.lm = lm(monthly_avg_spd ~ year, data=monthly_winter)
+summary(winter.lm)
+
+spring.lm = lm (monthly_avg_spd ~ year, data=monthly_spring)
+summary(spring.lm)
 ```
 
