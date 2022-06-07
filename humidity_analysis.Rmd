@@ -1,0 +1,72 @@
+---
+title: "Relative Humidity"
+author: "Larz von Huene"
+date: '2022-06-06'
+output: html_document
+---
+
+# Packages
+```{r}
+library(tidyverse)
+library(psychrolib)
+library(lubridate)
+```
+
+# Load in Data
+```{r, show_col_types = FALSE}
+synoptic <- read_csv("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16 synoptic data 1935-2021.csv")
+```
+# Clean data
+```{r}
+synoptic <- synoptic %>% 
+  filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
+  mutate(dry_bulb = as.numeric(dry_bulb), 
+         wet_bulb = as.numeric(wet_bulb), 
+         pressure_mb = as.numeric(pressure_mb), 
+         precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
+  filter(wet_bulb <= dry_bulb) # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+
+```
+
+```{r}
+ggplot(synoptic, aes(x = dry_bulb, y = wet_bulb)) + geom_point()
+```
+
+
+# Calculate Relative Humidity 
+```{r}
+SetUnitSystem("IP") #sets units to farenheit
+synoptic_rh <- synoptic %>% 
+  mutate(RH = GetRelHumFromTWetBulb(synoptic$dry_bulb, synoptic$wet_bulb, synoptic$pressure_mb)) %>% # from psychrolib package, get RH
+  mutate(year = year(date), month = month(date)) # get moth and year
+```
+
+
+# visual - general
+```{r}
+ggplot(synoptic_rh, aes(x = date, y = RH, color = as.factor(month))) +
+  geom_point() #overall, all data
+```
+
+# separate by seasons
+```{r}
+# doing by month for ease: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
+synoptic_rh <- synoptic_rh %>% 
+  mutate(season = ifelse(between(month, 1, 2), "winter",
+                         ifelse(month == 12, "winter", 
+                                ifelse(between(month, 3, 5), "spring",
+                                       ifelse(between(month, 6, 8), "summer",
+                                              ifelse(between(month, 9, 11), "fall", NA))))))
+
+summer_rh <- synoptic_rh %>% 
+  filter(season == "summer") 
+# find averagessss
+```
+
+# season visual
+```{r}
+summer_rh %>% 
+  ggplot(aes(year, RH)) +
+  geom_point()
+```
+
