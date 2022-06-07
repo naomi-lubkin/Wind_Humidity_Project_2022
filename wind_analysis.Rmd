@@ -369,23 +369,26 @@ summary(spring.lm)
 ## Big data attempt
 
 ```{r}
-#none of the code in this chunk is currently successful
+#none of the code in this chunk is currently successful (really big dataset with lots of NA's is causing trouble)
 
 #replacing null values with "NA" so code will hopefully run, also making other values numeric type
 #not doing what I want it to here
 stage_office_peak_5_sec_gusts %>%
-  mutate(rmyoung = as.numeric(rmyoung), 
+     mutate(rmyoung = as.numeric(rmyoung), 
          setra = as.numeric(setra), 
          foxboro = as.numeric(foxboro), 
          omega10 = as.numeric(omega10), 
          omega70 = as.numeric(omega70), 
-         ventus = as.numeric(ventus)) %>%
-  mutate (rmyoung = case_when(rmyoung == "NULL" ~ NA), 
+         ventus = as.numeric(ventus), 
+         ft742 = as.numeric(ft742))
+   mutate (rmyoung = case_when(rmyoung == "NULL" ~ NA), 
           setra = case_when(setra == "NULL" ~ NA), 
           foxboro = case_when(foxboro == "NULL" ~ NA), 
           omega10 = case_when(omega10 == "NULL" ~ NA), 
           omega70 = case_when(omega70 == "NULL" ~ NA), 
-          ventus = case_when(ventus == "NULL" ~ NA)) 
+          ventus = case_when(ventus == "NULL" ~ NA),
+          ft742 = case_when(ft742 == "NULL" ~ NA))
+ 
   
 #attempting to condense the data down so that multiple readings per minute are averaged by minute
 #having trouble with the NAs, not quite working yet
