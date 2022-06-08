@@ -372,22 +372,23 @@ summary(spring.lm)
 #none of the code in this chunk is currently successful (really big dataset with lots of NA's is causing trouble)
 
 #replacing null values with "NA" so code will hopefully run, also making other values numeric type
-#not doing what I want it to here
-stage_office_peak_5_sec_gusts %>%
+#not doing what I want it to here (for some reason is replacing all values with NA, not just Null)
+stage_office <- stage_office_peak_5_sec_gusts %>%
+  mutate (rmyoung = case_when(rmyoung == "NULL" ~ NA), 
+          setra = case_when(setra == "NULL" ~ NA), 
+          foxboro = case_when(foxboro == "NULL" ~ NA), 
+          omega10 = case_when(omega10 == "NULL" ~ NA), 
+          omega70 = case_when(omega70 == "NULL" ~ NA), 
+          ventus = case_when(ventus == "NULL" ~ NA),
+          ft742 = case_when(ft742 == "NULL" ~ NA)) %>%
      mutate(rmyoung = as.numeric(rmyoung), 
          setra = as.numeric(setra), 
          foxboro = as.numeric(foxboro), 
          omega10 = as.numeric(omega10), 
          omega70 = as.numeric(omega70), 
          ventus = as.numeric(ventus), 
-         ft742 = as.numeric(ft742))
-   mutate (rmyoung = case_when(rmyoung == "NULL" ~ NA), 
-          setra = case_when(setra == "NULL" ~ NA), 
-          foxboro = case_when(foxboro == "NULL" ~ NA), 
-          omega10 = case_when(omega10 == "NULL" ~ NA), 
-          omega70 = case_when(omega70 == "NULL" ~ NA), 
-          ventus = case_when(ventus == "NULL" ~ NA),
-          ft742 = case_when(ft742 == "NULL" ~ NA))
+         ft742 = as.numeric(ft742)) 
+   
  
   
 #attempting to condense the data down so that multiple readings per minute are averaged by minute
@@ -395,15 +396,30 @@ stage_office_peak_5_sec_gusts %>%
 stage_office_peak_5_sec_gusts_avgbymin <- stage_office_peak_5_sec_gusts %>% 
     na.omit(stage_office_peak_5_sec_gusts) %>%
   group_by(date) %>% 
-  summarize(avg_setra = mean(setra), 
+  summarize(avg_setra = mean(setra, na.rm = TRUE), 
             avg_foxboro = mean(foxboro), 
             #avg_rmyoung=mean(rmyoung),  
            # omega70 = mean(omega70), 
             ft742 = mean(ft742))
 #trying (unsuccessfully?) to get rid of NA's in ft742 column
 stage_office_peak_5_sec_gusts%>%
-  summary(mean(ft742, na.rm = TRUE))
+  summarize(avgft742  = mean(ft742, na.rm = TRUE))
+
+
+
+#trying same methods on smaller dataset (not working here either)
+df <- matrix(c(1,5,6,NA,3,5,NA, 1), ncol=2)
+df %>%
+  summarize(mean(values, na.rm = TRUE))
+```
+# Analysis by Month, Using Monthly Averages
+```{r}
+#November (10)
 
 ```
 
+#Analysis by Month, looking into gustiness 
+```{r}
+
+```
 
