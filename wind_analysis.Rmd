@@ -82,7 +82,7 @@ yearly_avg <-read_csv(here("Data", "b16-hourly yearly wind average 1935-2021.csv
 #get some metadata for this one
 stage_office_peak_5_sec_gusts <- read_csv(here("Data", "ft-tech-stage office peak 5 sec gusts.csv"))
 
-#hourly speed and direction 135-2021
+#hourly speed and direction 1935-2021
 hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
 
 hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
@@ -242,19 +242,6 @@ annual_avg_plot <- yearly_avg %>%
 annual_avg_plot
 
 
-
-
-
-
-
-#Attempt at wind rose
-#wind speeds are in mph even though the key says m/s
-initial_wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir_deg", ws="wind_speed", type = "era", paddle= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60))
-
-
-initial_wind_rose
-
-
 #plot of just winter (DJF) monthly averages 1981-2021
 #find a way to average by year? tough because of Dec being in the previous year, so I"m not sure how to code
 #has a line fitted to it, but linear regression model (below; winter.lm) has a non-significant p-value so line isn't really appropriate
@@ -288,45 +275,7 @@ spring_plot
 ```
 #Stats!
 ```{r}
-#Theil-Sen slope analysis 
-#all done with monthly averages
 
-#filtered for winter(Dec, Jan, Feb), 1981-2021
-winter.sen<- sens.slope(monthly_winter$monthly_avg_spd, conf.level = 0.95)
-View(winter.sen)
-
-#filtered for spring (March, April, May), 1981-2021
-spring.sen<- sens.slope(monthly_spring$monthly_avg_spd, conf.level = 0.95)
-View(spring.sen)
-
-#filtered for summer (June, July, Aug), 1981-2021
-summer.sen<- sens.slope(monthly_summer$monthly_avg_spd, conf.level = 0.95)
-View(summer.sen)
-
-#filtered for fall (Sept, Oct, Nov), 1981-2021
-fall.sen<- sens.slope(monthly_fall$monthly_avg_spd, conf.level = 0.95)
-View(fall.sen)
-
-#with all monthly averages 1981-2021
-annual.sen<- sens.slope(monthly_since81$monthly_avg_spd, conf.level = 0.95)
-View(annual.sen)
-
-#with all monthly averages 1981-2013
-#just did this one to compare the value I came up with with the value from 
-#Cronin (2015), to make sure our Theil Sen values were the same
-sen.81to13 <- TheilSen(monthly_81to13$year, monthly_81to13$monthly_spd_ms)
- 
-
-#Linear regression of seasonal data for winter and spring, using monthly averages filtered by season
-winter.lm = lm(monthly_avg_spd ~ year, data=monthly_winter)
-summary(winter.lm)
-#p-value  = 0.4218
-#r-squared = 0.005341
-
-spring.lm = lm (monthly_avg_spd ~ year, data=monthly_spring)
-summary(spring.lm)
-#p-value  = 0.3412
-#r-squared = 0.007489 
 ```
 
 
@@ -581,10 +530,10 @@ spring_MAMJ_plot <-grid.arrange(march_plot_81, april_plot_81, may_plot_81, june_
                                 nrow = 2, 
                                 top = "'Spring' Wind Speeds 1981-2021")
 spring_MAMJ_plot
+```
 
-
-
-
+#Sen Slopes 
+```{r}
 ##Theil-Sen Slopes for wind averages, by month, 1981-2021
 #november
 nov.sen <- sens.slope(just_nov_81$monthly_avg_spd, conf.level = 0.95)
@@ -618,6 +567,37 @@ View(may.sen)
 #june
 june.sen <-sens.slope(just_june_81$monthly_avg_spd, conf.level = 0.95)
 View(june.sen)
+
+################################################################################
+#Theil sen slopes for seasonal data, annual data
+#all done with monthly averages
+
+#filtered for winter(Dec, Jan, Feb), 1981-2021
+winter.sen<- sens.slope(monthly_winter$monthly_avg_spd, conf.level = 0.95)
+View(winter.sen)
+
+#filtered for spring (March, April, May), 1981-2021
+spring.sen<- sens.slope(monthly_spring$monthly_avg_spd, conf.level = 0.95)
+View(spring.sen)
+
+#filtered for summer (June, July, Aug), 1981-2021
+summer.sen<- sens.slope(monthly_summer$monthly_avg_spd, conf.level = 0.95)
+View(summer.sen)
+
+#filtered for fall (Sept, Oct, Nov), 1981-2021
+fall.sen<- sens.slope(monthly_fall$monthly_avg_spd, conf.level = 0.95)
+View(fall.sen)
+
+#with all monthly averages 1981-2021
+annual.sen<- sens.slope(monthly_since81$monthly_avg_spd, conf.level = 0.95)
+View(annual.sen)
+
+#with all monthly averages 1981-2013
+#just did this one to compare the value I came up with with the value from 
+#Cronin (2015), to make sure our Theil Sen values were the same
+sen.81to13 <- TheilSen(monthly_81to13$year, monthly_81to13$monthly_spd_ms)
+ 
+
 ```
 
 #Analysis by Month, looking into gustiness 
@@ -741,7 +721,7 @@ gustiness_NDJFMA_plot
 
 ```
 
-#Analysis by Month, gustiness/temp/fog (XTRM)
+#Analysis by Month, high winds/temp/fog (XTRM)
 ```{r}
 #sorting through present weather dataframe to select for hours with fog
 hourly_fog <- pres_weather %>%

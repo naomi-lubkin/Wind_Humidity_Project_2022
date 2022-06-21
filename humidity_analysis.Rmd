@@ -37,7 +37,9 @@ synoptic <- synoptic %>%
 SetUnitSystem("IP") #sets units to farenheit
 synoptic_rh <- synoptic %>% 
   mutate(RH = GetRelHumFromTWetBulb(synoptic$dry_bulb, synoptic$wet_bulb, synoptic$pressure_mb)) %>% # from psychrolib package, get RH
-  mutate(year = year(date), month = month(date)) # get month and year
+  mutate(year = year(date), month = month(date)) %>% # get month and year
+  mutate(dry_bulb_C = (dry_bulb-32)/1, wet_bulb_C = (wet_bulb-32)/1.8)
+  
 
 
 
@@ -45,29 +47,32 @@ synoptic_rh <- synoptic %>%
 # Calculations from WMO annex 4.B
 # split data into ice and water (based on Seidel's distinction)
 synoptic_rh_liquid <- synoptic_rh %>% 
-  filter(wet_bulb >= 0)
+  filter(wet_bulb_C >= 0) 
 synoptic_rh_ice <- synoptic_rh %>% 
-  filter(wet_bulb < 0)
+  filter(wet_bulb_C < 0)
 
 
 # saturation vapor pressure
 f_p_ice <- 1.0016+3.15*(10^-6)*(synoptic_rh_ice$pressure_mb)-0.074*(synoptic_rh_ice$pressure_mb)^-1 # function of pressure
 f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074*(synoptic_rh_liquid$pressure_mb)^-1
 
-sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb))) # saturation vapor pressure for pure water
+sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb_C)/(243.12+(synoptic_rh_liquid$dry_bulb_C))) # saturation vapor pressure for pure water
 sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
   
-sat_vap_p_ice_pure <- 6.112^(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb)))  # saturation vapor pressure for pure ice
+sat_vap_p_ice_pure <- 6.112^(22.46*(synoptic_rh_ice$dry_bulb_C)/(272.62+(synoptic_rh_ice$dry_bulb_C)))  # saturation vapor pressure for pure ice
 sat_vap_p_ice_moist <- f_p_ice*sat_vap_p_ice_pure  # saturation vapor pressure for moist ice?
 
 # Dew point and Frost point
 
 
 # psychometric formulas for the Assmann psychrometer
-water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
+water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb_C)/(243.12+(synoptic_rh_liquid$wet_bulb_C))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb_C))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb_C - synoptic_rh_liquid$wet_bulb_C)
 
 # Relative humidity
 rh <- 100*water_vap_p/sat_vap_p_water_moist
+
+synoptic_rh_liquid <- synoptic_rh_liquid %>% 
+  mutate(RH_calc = rh)
 
 
 ```
