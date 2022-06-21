@@ -12,9 +12,17 @@ date: '2022-06-01'
 #install.packages("climaemet")
 #install.packages("reshape2")
 #install.packages("mblm")
-#install.packages("trends")
 #install.packages("zyp")
 #install.packages("robslopes")
+#install.packages("gridExtra")
+#install.packages("trend")
+#install.packages ("stringr")
+#install.packages("climatol")
+#install.packages("fitdistrplus")
+#install.packages("gamlss")
+#install.packages("snht")
+
+
 
 library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
@@ -24,17 +32,24 @@ here::here()
 library(lubridate)
 library(dplyr)
 #library(tibbletime)
-library(openair)
+library(openair) #for wind rose
 #library(climaemet)
 library(reshape2)
 library(mblm)
 
 library(robslopes)
-
-
+library(gridExtra)
+library(trend) #for sen slope function
+library(stringr)
+library(climatol) #for homogenization test
+library(fitdistrplus) #maybe don't need
+library(gamlss)
+library(snht)
 ```
 #loading in data
 ```{r}
+#ALL DATA from data folder 
+
 #b16 peak daily gust speed and direction, jan 1935-dec 2021
 peak_gust_dir <- read_csv(here("Data", "b16-peak gust speed and dir 1935-2021.csv"))
 
@@ -60,8 +75,6 @@ daily_avg <-read_csv(here("Data", "b16-hourly daily wind average 1935-2021.csv")
 #b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
 monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
 
-#Switiching data type from character to numeric, rounding to 1 decimal to match B16 values
-#Note: NAs introduced when switching data type to numeric were "NULL" in original dataset
 
 #b16 yearly average wind speed (from hourly averages), jan 1935- dec 2021
 yearly_avg <-read_csv(here("Data", "b16-hourly yearly wind average 1935-2021.csv"))
@@ -71,6 +84,8 @@ stage_office_peak_5_sec_gusts <- read_csv(here("Data", "ft-tech-stage office pea
 
 #hourly speed and direction 135-2021
 hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
+
+hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
 
 
 ```
@@ -85,7 +100,9 @@ daily_avg <- daily_avg %>%
 monthly_avg <- monthly_avg %>%
   mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
          monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
-         date = as.Date(date))
+         date = as.Date(date), 
+         month = month(date), 
+         year =year(date))
 
 yearly_avg <- yearly_avg %>%
   mutate(year_avg_speed = as.numeric(year_avg_speed), 
@@ -97,62 +114,32 @@ yearly_avg <- yearly_avg %>%
                             year >= 1981 ~ "3", 
                             TRUE ~ NA_character_))
 
-#for wind rose, making all data the right type and homogonizing directions to 8 cardinal directions (first ~20 years have 16), then switching cardinal directions to degrees (input data type for wind rose must be numeric). Also getting rid of NA values
-hourly_spd_dir_rose <- hourly_spd_dir %>%
-  #select(wind_speed, wind_direction) %>%
-  mutate(wind_speed = as.numeric(wind_speed), 
-         wind_direction = as.character(wind_direction)) %>%
-  mutate(simple_direction =  case_when( wind_direction == "WSW" ~ "SW", 
-                                        wind_direction == "WNW" ~ "NW", 
-                                        wind_direction == "NNW" ~ "NW",
-                                        wind_direction == "NNE" ~ "NE",
-                                        wind_direction == "ENE" ~ "NE",
-                                        wind_direction == "ESE" ~ "SE",
-                                        wind_direction == "SSE" ~ "SE",
-                                        wind_direction == "SSW" ~ "SW", 
-                                        wind_direction == "N" ~ "N",
-                                        wind_direction == "NE" ~ "NE",
-                                        wind_direction == "E" ~ "E",
-                                        wind_direction == "SE" ~ "SE",
-                                        wind_direction == "S" ~ "S",
-                                        wind_direction == "SW" ~ "SW",
-                                        wind_direction == "W" ~ "W",
-                                        wind_direction == "NW" ~ "NW")) %>%
-  mutate(dir_deg = case_when(simple_direction == "N" ~ 0,
-                             simple_direction == "NE" ~ 45,
-                             simple_direction== "E" ~ 90,
-                             simple_direction== "SE" ~ 135,
-                            simple_direction == "S" ~ 180,
-                             simple_direction== "SW" ~ 225,
-                             simple_direction== "W" ~ 270,
-                            simple_direction== "NW" ~ 315)) %>%
-  mutate(wind_speed = as.numeric(wind_speed), 
-         dir_deg = as.numeric(dir_deg)) %>%
-  drop_na() %>%
-  mutate(year = year(date))
+# making a column grouping monthly data into seasons for seasonal analysis 
+# also adding a column converting mph to m/s to compare to Cronin 
+seasonal_winds <- monthly_avg %>%
+  mutate(year = year(date), month=month(date), 
+         year = as.numeric(year), 
+         month = as.numeric(month), 
+         season = case_when(
+           month == 12 ~ "Winter",
+            month == 1 ~ "Winter",
+            month == 2 ~ "Winter",
+           month == 3 ~ "Spring",
+           month == 4 ~ "Spring",
+           month == 5 ~ "Spring",
+           month == 6 ~ "Summer",
+           month == 7 ~ "Summer",
+           month == 8 ~ "Summer",
+           month == 9 ~ "Fall",
+           month == 10 ~ "Fall",
+           month == 11~ "Fall",
+           TRUE ~ NA_character_)) %>%
+  mutate(monthly_spd_ms = monthly_avg_spd*0.44704)
+```
+
+
   
-                                       
-
-#wind speeds/directions 1981-2021
-#hourly, grouped by "era" so plotting later is easier
-hourly_spd_dir_byyear <- hourly_spd_dir_rose %>%
-  mutate(era = case_when (year <= 1940 ~ "1935-1940", 
-                            year %in% 1941:1980 ~ "1941-1980", 
-                            year >= 1981 ~ "1981-2021", 
-                            TRUE ~ NA_character_))
-
-#hourly data 1981-2021
-hourly_since_1981 <- hourly_spd_dir_byyear %>%
-  filter(year >= 1981) %>%
-  mutate(date= as.numeric(date))
-
-#monthly data, grouped by year
-monthly_spd_dir_byyear <- hourly_spd_dir_rose %>%
-  mutate(era = case_when (year <= 1940 ~ "1935-1940", 
-                            year %in% 1941:1980 ~ "1941-1980", 
-                            year >= 1981 ~ "1981-2021", 
-                            TRUE ~ NA_character_))
-
+```{r}
 
 #yearly data by year so theil-sen slopes are easier to calculate
 #1935-1940
@@ -195,7 +182,10 @@ monthly_since81 <- seasonal_winds %>%
 #all seasons 1981-2013 (to check my values against Cronin)
 monthly_81to13 <- monthly_since81 %>%
   filter(year<=2013)
+```
 
+#Additive Time Series Analysis
+```{r}
 #for additive time series analysis
 #monthly 1935-2021
 monthly_avg_decomp <- monthly_avg %>%
@@ -213,30 +203,9 @@ monthly_decomp_81 <- ts(monthly_decomp_81$monthly_avg_spd, frequency=12)
 decomp81 <- decompose(monthly_decomp_81)
 plot(decomp81)
   
-# making a column grouping monthly data into seasons for seasonal analysis 
-# also adding a column converting mph to m/s to compare to Cronin 
-seasonal_winds <- monthly_avg %>%
-  mutate(year = year(date), month=month(date), 
-         year = as.numeric(year), 
-         month = as.numeric(month), 
-         season = case_when(
-           month == 12 ~ "Winter",
-            month == 1 ~ "Winter",
-            month == 2 ~ "Winter",
-           month == 3 ~ "Spring",
-           month == 4 ~ "Spring",
-           month == 5 ~ "Spring",
-           month == 6 ~ "Summer",
-           month == 7 ~ "Summer",
-           month == 8 ~ "Summer",
-           month == 9 ~ "Fall",
-           month == 10 ~ "Fall",
-           month == 11~ "Fall",
-           TRUE ~ NA_character_)) %>%
-  mutate(monthly_spd_ms = monthly_avg_spd*0.44704)
-        
 
-view(seasonal_winds)
+     
+
 ```
 
 #Plotting
@@ -274,14 +243,6 @@ annual_avg_plot
 
 
 
-#ggwindrose(wind_speed, wind_direction, n_directions = 8)
-#was going to use this df for the wind rose, but then figured out another way to do a wind rose so this is unnecessary
-stage_office_clean <- melt(stage_office_peak_5_sec_gusts, id.vars = 'date', variable.name = 'series')
-stage_office_plot <- stage_office_clean %>%
-  ggplot(aes(x= date,
-             y = value)) +
-  geom_line(aes(colour = series))
-stage_office_plot
 
 
 
@@ -318,7 +279,7 @@ spring_plot <- monthly_spring %>%
   geom_point(colour = "purple") +
   ylim(0,70) +
   labs (x = "Year", y = "Wind Speed (mph)") +
-  ggtitle("Spring (MAM) Wind Speeds 1981-2021") +
+  ggtitle("'Spring' (MAM) Wind Speeds 1981-2021") +
   theme_minimal() +
   geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
   
@@ -330,20 +291,25 @@ spring_plot
 #Theil-Sen slope analysis 
 #all done with monthly averages
 
-#filtered for winter(Dec, Jan, Feb), 1935-2021
-winter.sen <- TheilSen(monthly_winter$year, monthly_winter$monthly_spd_ms)
+#filtered for winter(Dec, Jan, Feb), 1981-2021
+winter.sen<- sens.slope(monthly_winter$monthly_avg_spd, conf.level = 0.95)
+View(winter.sen)
 
-#filtered for spring (March, April, May), 1935-2021
-spring.sen <- TheilSen(monthly_spring$year, monthly_spring$monthly_spd_ms)
+#filtered for spring (March, April, May), 1981-2021
+spring.sen<- sens.slope(monthly_spring$monthly_avg_spd, conf.level = 0.95)
+View(spring.sen)
 
-#filtered for summer (June, July, Aug), 1935-2021
-summer.sen <-TheilSen(monthly_summer$year, monthly_summer$monthly_spd_ms)
+#filtered for summer (June, July, Aug), 1981-2021
+summer.sen<- sens.slope(monthly_summer$monthly_avg_spd, conf.level = 0.95)
+View(summer.sen)
 
-#filtered for fall (Sept, Oct, Nov), 1935-2021
-fall.sen <-TheilSen(monthly_fall$year, monthly_fall$monthly_spd_ms)
+#filtered for fall (Sept, Oct, Nov), 1981-2021
+fall.sen<- sens.slope(monthly_fall$monthly_avg_spd, conf.level = 0.95)
+View(fall.sen)
 
 #with all monthly averages 1981-2021
-annual.sen <-TheilSen(monthly_since81$year, monthly_since81$monthly_spd_ms)
+annual.sen<- sens.slope(monthly_since81$monthly_avg_spd, conf.level = 0.95)
+View(annual.sen)
 
 #with all monthly averages 1981-2013
 #just did this one to compare the value I came up with with the value from 
@@ -364,62 +330,712 @@ summary(spring.lm)
 ```
 
 
-
-
-## Big data attempt
-
-```{r}
-#none of the code in this chunk is currently successful (really big dataset with lots of NA's is causing trouble)
-
-#replacing null values with "NA" so code will hopefully run, also making other values numeric type
-#not doing what I want it to here (for some reason is replacing all values with NA, not just Null)
-stage_office <- stage_office_peak_5_sec_gusts %>%
-  mutate (rmyoung = case_when(rmyoung == "NULL" ~ NA), 
-          setra = case_when(setra == "NULL" ~ NA), 
-          foxboro = case_when(foxboro == "NULL" ~ NA), 
-          omega10 = case_when(omega10 == "NULL" ~ NA), 
-          omega70 = case_when(omega70 == "NULL" ~ NA), 
-          ventus = case_when(ventus == "NULL" ~ NA),
-          ft742 = case_when(ft742 == "NULL" ~ NA)) %>%
-     mutate(rmyoung = as.numeric(rmyoung), 
-         setra = as.numeric(setra), 
-         foxboro = as.numeric(foxboro), 
-         omega10 = as.numeric(omega10), 
-         omega70 = as.numeric(omega70), 
-         ventus = as.numeric(ventus), 
-         ft742 = as.numeric(ft742)) 
-   
  
-  
-#attempting to condense the data down so that multiple readings per minute are averaged by minute
-#having trouble with the NAs, not quite working yet
-stage_office_peak_5_sec_gusts_avgbymin <- stage_office_peak_5_sec_gusts %>% 
-    na.omit(stage_office_peak_5_sec_gusts) %>%
-  group_by(date) %>% 
-  summarize(avg_setra = mean(setra, na.rm = TRUE), 
-            avg_foxboro = mean(foxboro), 
-            #avg_rmyoung=mean(rmyoung),  
-           # omega70 = mean(omega70), 
-            ft742 = mean(ft742))
-#trying (unsuccessfully?) to get rid of NA's in ft742 column
-stage_office_peak_5_sec_gusts%>%
-  summarize(avgft742  = mean(ft742, na.rm = TRUE))
 
-
-
-#trying same methods on smaller dataset (not working here either)
-df <- matrix(c(1,5,6,NA,3,5,NA, 1), ncol=2)
-df %>%
-  summarize(mean(values, na.rm = TRUE))
-```
-# Analysis by Month, Using Monthly Averages
+# Wind Analysis by Month, Using Monthly Averages
 ```{r}
-#November (10)
+###WINTER!
+##November (11)
+#making the data easier to work with (filtering by month, year)
+just_nov <- monthly_avg %>%
+  filter(month == 11)
+just_nov_81 <- just_nov %>%
+  filter(year>=1981)
+  
+  
+#plot of Nov averages 1935-2021
+november_plot_35 <- just_nov %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+november_plot_35
 
+#plot of Nov averages 1981-2021
+november_plot_81 <- just_nov_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+november_plot_81
+
+##December (12)
+#making the data easier to work with (filtering by month, year)
+just_dec <- monthly_avg %>%
+  filter(month == 12)
+just_dec_81 <- just_dec %>%
+  filter(year>=1981)
+#plot of Nov averages 1935-2021
+december_plot_35 <- just_dec %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+december_plot_35
+
+#plot of Dec averages 1981-2021
+december_plot_81 <- just_dec_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+december_plot_81
+
+##January (1)
+#making the data easier to work with (filtering by month, year)
+just_jan <- monthly_avg %>%
+  filter(month == 1)
+just_jan_81 <- just_jan %>%
+  filter(year>=1981)
+#plot of Jan averages 1935-2021
+january_plot_35 <- just_jan %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+january_plot_35
+
+#plot of Jan averages 1981-2021
+january_plot_81 <- just_jan_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+january_plot_81
+
+##February (2)
+#making the data easier to work with (filtering by month, year)
+just_feb <- monthly_avg %>%
+  filter(month == 2)
+just_feb_81 <- just_feb %>%
+  filter(year>=1981)
+#plot of Feb averages 1935-2021
+february_plot_35 <- just_feb %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("February Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+february_plot_35
+
+#plot of Feb averages 1981-2021
+february_plot_81 <- just_feb_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("February") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+february_plot_81
+
+winter_NDJF_plot <-grid.arrange(november_plot_81, december_plot_81, january_plot_81, february_plot_81, 
+                                nrow = 2, 
+                                top = "'Winter' Wind Speeds 1981-2021")
+winter_NDJF_plot
+
+
+################################################################################
+#SPRING
+#March (3)
+#making the data easier to work with (filtering by month, year)
+just_mar <- monthly_avg %>%
+  filter(month == 3)
+just_mar_81 <- just_mar %>%
+  filter(year>=1981)
+  
+  
+#plot of March averages 1935-2021
+march_plot_35 <- just_mar %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("March Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+march_plot_35
+
+#plot of March averages 1981-2021
+march_plot_81 <- just_mar_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("March") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+march_plot_81
+
+#April (4)
+#making the data easier to work with (filtering by month, year)
+just_apr <- monthly_avg %>%
+  filter(month == 4)
+just_apr_81 <- just_apr %>%
+  filter(year>=1981)
+  
+  
+#plot of April averages 1935-2021
+april_plot_35 <- just_apr %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("April Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+april_plot_35
+
+#plot of April averages 1981-2021
+april_plot_81 <- just_apr_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("April") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+april_plot_81
+
+#May (5)
+#making the data easier to work with (filtering by month, year)
+just_may <- monthly_avg %>%
+  filter(month == 5)
+just_may_81 <- just_may %>%
+  filter(year>=1981)
+  
+  
+#plot of May averages 1935-2021
+may_plot_35 <- just_may %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+may_plot_35
+
+#plot of May averages 1981-2021
+may_plot_81 <- just_may_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+may_plot_81
+
+#June (6)
+#making the data easier to work with (filtering by month, year)
+just_june <- monthly_avg %>%
+  filter(month == 6)
+just_june_81 <- just_june %>%
+  filter(year>=1981)
+  
+  
+#plot of May averages 1935-2021
+june_plot_35 <- just_june %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("June Wind Speeds 1935-2021") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+june_plot_35
+
+#plot of May averages 1981-2021
+june_plot_81 <- just_june_81 %>%
+  ggplot(aes(x = date, y = monthly_avg_spd ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("June") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+june_plot_81
+
+spring_MAMJ_plot <-grid.arrange(march_plot_81, april_plot_81, may_plot_81, june_plot_81, 
+                                nrow = 2, 
+                                top = "'Spring' Wind Speeds 1981-2021")
+spring_MAMJ_plot
+
+
+
+
+##Theil-Sen Slopes for wind averages, by month, 1981-2021
+#november
+nov.sen <- sens.slope(just_nov_81$monthly_avg_spd, conf.level = 0.95)
+View(nov.sen)
+
+#december
+dec.sen <- sens.slope(just_dec_81$monthly_avg_spd, conf.level = 0.95)
+View(dec.sen)
+
+#january
+jan.sen <-sens.slope(just_jan_81$monthly_avg_spd, conf.level = 0.95)
+View(jan.sen)
+
+
+#february
+feb.sen <- sens.slope(just_feb_81$monthly_avg_spd, conf.level = 0.95)
+View(feb.sen)
+
+#march
+mar.sen <- sens.slope(just_mar_81$monthly_avg_spd, conf.level = 0.95)
+View(mar.sen)
+
+#april
+april.sen <-sens.slope(just_apr_81$monthly_avg_spd, conf.level = 0.95)
+View(april.sen)
+
+#may
+may.sen <- sens.slope(just_may_81$monthly_avg_spd, conf.level = 0.95)
+View(may.sen)
+
+#june
+june.sen <-sens.slope(just_june_81$monthly_avg_spd, conf.level = 0.95)
+View(june.sen)
 ```
 
 #Analysis by Month, looking into gustiness 
 ```{r}
+#gustiness here is ratio of peak gust: avg wind speed
+#filtering peak daily gust dataset to include only dates after 1981
+dailygust_81 <- peak_gust_dir %>%
+  mutate(year=year(date), 
+         date = as.Date(date))%>%
+  filter(year>=1981)
+#filtering daily average wind speed dataset to include only dates after 1981
+dailyavg_81 <- daily_avg %>%
+  mutate(date = as.Date(date), 
+         year=year(date))%>%
+  filter(year>=1981)
+#merging peak daily gust and average daily wind datasets so I can compare them
+gusts<-merge(dailygust_81, dailyavg_81, by="date")
+#making a "gustiness" column that's the ratio of peak gust:average wind
+gusts<- gusts %>%
+  mutate(gustiness = peak_gust_speed/daily_avg_spd) %>%
+  #select(date, peak_gust_speed, daily_avg_spd, gustiness) %>%
+  mutate(month = month(date))
+
+#ratio plotted... not super helpful as a visual (too many data points)
+gustiness_plot <- gusts %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Peak Daily Gust : Average Daily Wind Speed") +
+  ggtitle ("Gustiness 1981-2021") +
+  theme_minimal()
+gustiness_plot
+
+
+
+
+#Gustiness by month
+#Nov
+nov_gust <- gusts %>%
+  filter(month==11)
+
+nov_gust_plot <- nov_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ggtitle ("November") +
+  ylim(0, 15) +
+  theme_minimal()
+nov_gust_plot
+
+#Dec
+dec_gust <- gusts %>%
+  filter(month == 12)
+
+dec_gust_plot <- dec_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ggtitle ("December") +
+  ylim(0, 15) +
+  theme_minimal()
+dec_gust_plot
+
+#Jan 
+jan_gust <- gusts %>%
+  filter(month == 1)
+
+jan_gust_plot <- jan_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ggtitle ("January") +
+  ylim(0, 15) +
+  theme_minimal()
+jan_gust_plot
+
+#Feb 
+feb_gust <- gusts %>%
+  filter(month == 2)
+
+feb_gust_plot <- feb_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ggtitle ("February") +
+  ylim(0, 15) +
+  theme_minimal()
+feb_gust_plot
+
+
+#Mar
+mar_gust <- gusts %>%
+  filter(month == 3)
+
+mar_gust_plot <- mar_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ggtitle ("March") +
+  ylim(0, 15) +
+  theme_minimal()
+mar_gust_plot
+
+#Apr
+apr_gust <- gusts %>%
+  filter(month == 4)
+
+apr_gust_plot <- apr_gust %>%
+  ggplot(aes(x=date, y= gustiness)) +
+  geom_point() +
+  labs(x= "Date", y="Gustiness") +
+  ylim(0, 15) +
+  ggtitle ("April") +
+  theme_minimal()
+apr_gust_plot
+
+gustiness_NDJFMA_plot <-grid.arrange(nov_gust_plot, dec_gust_plot, jan_gust_plot, feb_gust_plot, mar_gust_plot, apr_gust_plot, 
+                                nrow = 2, 
+                                top = "Monthly Gustiness (Peak Daily Gust:Avg Daily Wind Speed) 1981-2021")
+gustiness_NDJFMA_plot
+
 
 ```
+
+#Analysis by Month, gustiness/temp/fog (XTRM)
+```{r}
+#sorting through present weather dataframe to select for hours with fog
+hourly_fog <- pres_weather %>%
+  mutate(fog= case_when(
+    pw1 == "F" ~"F", 
+    pw2 == "F" ~"F", 
+    pw3 =="F" ~"F", 
+    pw4 == "F" ~"F", 
+    pw5 == "F" ~"F", 
+    pw6 == "F" ~"F", 
+    pw7 == "F" ~"F", 
+    pw8 == "F" ~"F", 
+    pw9 == "F" ~"F", 
+    TRUE ~ as.character(NA))) %>%
+  select(date, fog)
+
+
+#returning dates that meet all 3 requirements (fog, below freezing, strong winds) per year
+xtrm_cond <- merge(hourly_fog, hourly_wind, by = 'date')
+xtrm_cond <- merge(xtrm_cond, hourly_temp, by = 'date') 
+xtrm_cond <- xtrm_cond %>%
+  mutate(xtrm= case_when((fog=="F") & (wind_speed >= 74) & (temperature < 32) ~ "Y", 
+         TRUE ~ as.character(NA))) %>%
+  mutate(date = as.Date(date), 
+         month=month(date), 
+         year = year(date), 
+         monyear = month + year) %>%
+  na.omit() 
+#combining year and month for analysis purposes
+xtrm_cond$monyear <- str_c(xtrm_cond$month, "-", xtrm_cond$year)
+
+count_xtrm <- xtrm_cond %>% 
+  count(year, xtrm)
+#bar graph of number of events
+xtrm_year_plot_35 <- count_xtrm %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point(stat= "identity") +
+  labs(x="Year", y="Number of Extreme Weather Events") +
+  theme_minimal()
+
+xtrm_year_plot_35
+
+#same thing but with 1981-2021 data
+xtrm_81 <- count_xtrm %>%
+  filter(year>=1981)
+
+xtrm_year_plot_81 <- xtrm_81 %>%
+  ggplot(aes(x=year, y=n)) +
+  #geom_bar(stat= "identity") +
+  geom_point() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Extreme Weather Events") +
+  theme_minimal()
+
+xtrm_year_plot_81
+#counting number of times events with all 3 happen per month / making data workable
+xtrm_month <- xtrm_cond %>%
+  count(monyear, xtrm) %>%
+  separate(monyear, c("month", "year")) %>%
+  filter(year>=1981) 
+      
+
+#plotting monthly trends over time
+#Nov
+xtrm_nov <- xtrm_month %>%
+  filter(month == 11) %>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Dec
+xtrm_dec <- xtrm_month %>%
+  filter(month == 12)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Jan
+xtrm_jan <- xtrm_month %>%
+  filter(month == 1)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Feb
+xtrm_feb <- xtrm_month %>%
+  filter(month == 2)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Mar
+xtrm_mar <- xtrm_month %>%
+  filter(month == 3)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Apr
+xtrm_apr <- xtrm_month %>%
+  filter(month == 4)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#May
+xtrm_may <- xtrm_month %>%
+  filter(month == 5)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Jun
+xtrm_jun <- xtrm_month %>%
+  filter(month == 6)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+
+#and visualizing these events by month 
+#nov
+xtrm_nov_plot <- xtrm_nov %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+xtrm_dec_plot <- xtrm_dec %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+xtrm_jan_plot <- xtrm_jan %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+xtrm_feb_plot <- xtrm_feb %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+xtrm_mar_plot <- xtrm_mar %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+xtrm_apr_plot <- xtrm_apr %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+
+#may
+xtrm_may_plot <- xtrm_may %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+
+#june
+xtrm_jun_plot <- xtrm_jun %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+
+extreme_NovApr_plot <-grid.arrange(xtrm_nov_plot, xtrm_dec_plot, xtrm_jan_plot, xtrm_feb_plot, xtrm_mar_plot, xtrm_apr_plot, 
+                                nrow = 2, 
+                                top = "Number of Extreme Weather Events by Month, 1981-2021")
+extreme_NovApr_plot
+###############################################################################
+#Stats!
+#All Years
+hist(xtrm_month$n)
+fitDist(n,
+        data = xtrm_month, 
+        type = "counts", 
+        try.gamlss = T)
+#best fit: ZAMBI (Zero Altered Negative binomial type I) (AIC=3138.92)
+
+histDist(xtrm_month$n, 
+         "ZANBI", 
+         density = T, 
+         main = "Number of Extreme Events compared to Negative bionomial type I", 
+         xlab = "Number Extreme")
+#not a fantastic fit 
+
+descdist(xtrm_month$n)
+#squarely w/i beta, but beta is for continuous values btwn 0-1 so is innappropriate
+
+mod_xtrm_all <- gamlss(n ~ year,
+                       family = ZANBI(mu.link = "log", sigma.link = "log", nu.link = "logit"), 
+                       data = xtrm_month, 
+                       control = gamlss.control())
+summary(mod_xtrm_all)
+
+#Just November
+#best fit: double poisson (AIC=343.852)
+fitDist(n,
+        data = xtrm_nov, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_nov <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=xtrm_nov, 
+                       control = gamlss.control())
+summary(mod_xtrm_nov)
+
+#Just December
+#best fit: Double poisson (DPO), AIC=376.478
+fitDist(n,
+        data = xtrm_dec, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_dec <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=xtrm_dec, 
+                       control = gamlss.control())
+summary(mod_xtrm_dec)
+
+#Just January
+#best fit: Double poisson (DPO), AIC=404.077
+fitDist(n,
+        data = xtrm_jan, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_jan <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=xtrm_jan, 
+                       control = gamlss.control())
+summary(mod_xtrm_jan)
+
+#Just February 
+#best fit: negative bionomial type II (NBII), AIC=378.301
+fitDist(n,
+        data = xtrm_feb, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_feb <- gamlss(n~year, 
+                       family = NBII(), 
+                       data=xtrm_feb, 
+                       control = gamlss.control())
+summary(mod_xtrm_feb)
+
+#Just March 
+#best fit: Double poisson (DPO), AIC=375.277
+fitDist(n,
+        data = xtrm_mar, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_mar <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=xtrm_mar, 
+                       control = gamlss.control())
+summary(mod_xtrm_mar)
+
+#Just April
+#Best fit Poisson Inverse Gaussian (PIG), AIC= 325.018
+fitDist(n,
+        data = xtrm_apr, 
+        type = "counts", 
+        try.gamlss = T)
+mod_xtrm_apr <- gamlss(n~year, 
+                       family = PIG(), 
+                       data=xtrm_apr, 
+                       control = gamlss.control())
+summary(mod_xtrm_apr)
+```
+
+#Sustained wind 
+```{r}
+#trying to select for consecutive rows with high wind speeds, found this code online, haven't modified it yet just pasted in
+counts <- hourly_wind  %>% 
+  rle(s1$V2 < 1), sum(lengths[values] >= 40))
+
+```
+
 

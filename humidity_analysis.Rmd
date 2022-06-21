@@ -5,11 +5,14 @@ date: '2022-06-06'
 output: html_document
 ---
 
-# Packages
+# Packages and set working directory
 ```{r}
 library(tidyverse)
 library(psychrolib)
 library(lubridate)
+
+knitr::opts_chunk$set(echo = TRUE)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 ```
 
 # Load in Data
@@ -28,29 +31,51 @@ synoptic <- synoptic %>%
 
 ```
 
-```{r}
-ggplot(synoptic, aes(x = dry_bulb, y = wet_bulb)) + geom_point()
-```
-
 
 # Calculate Relative Humidity 
 ```{r}
 SetUnitSystem("IP") #sets units to farenheit
 synoptic_rh <- synoptic %>% 
   mutate(RH = GetRelHumFromTWetBulb(synoptic$dry_bulb, synoptic$wet_bulb, synoptic$pressure_mb)) %>% # from psychrolib package, get RH
-  mutate(year = year(date), month = month(date)) # get moth and year
-```
+  mutate(year = year(date), month = month(date)) # get month and year
 
 
-# visual - general
-```{r}
-ggplot(synoptic_rh, aes(x = date, y = RH, color = as.factor(month))) +
-  geom_point() #overall, all data
+
+
+# Calculations from WMO annex 4.B
+# split data into ice and water (based on Seidel's distinction)
+synoptic_rh_liquid <- synoptic_rh %>% 
+  filter(wet_bulb >= 0)
+synoptic_rh_ice <- synoptic_rh %>% 
+  filter(wet_bulb < 0)
+
+
+# saturation vapor pressure
+f_p_ice <- 1.0016+3.15*(10^-6)*(synoptic_rh_ice$pressure_mb)-0.074*(synoptic_rh_ice$pressure_mb)^-1 # function of pressure
+f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074*(synoptic_rh_liquid$pressure_mb)^-1
+
+sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb))) # saturation vapor pressure for pure water
+sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
+  
+sat_vap_p_ice_pure <- 6.112^(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb)))  # saturation vapor pressure for pure ice
+sat_vap_p_ice_moist <- f_p_ice*sat_vap_p_ice_pure  # saturation vapor pressure for moist ice?
+
+# Dew point and Frost point
+
+
+# psychometric formulas for the Assmann psychrometer
+water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
+
+# Relative humidity
+rh <- 100*water_vap_p/sat_vap_p_water_moist
+
+
 ```
+
 
 # separate by seasons
 ```{r}
-# doing by month for ease: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
+# seasons by month for ease: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
 synoptic_rh <- synoptic_rh %>% 
   mutate(season = ifelse(between(month, 1, 2), "winter",
                          ifelse(month == 12, "winter", 
@@ -58,15 +83,76 @@ synoptic_rh <- synoptic_rh %>%
                                        ifelse(between(month, 6, 8), "summer",
                                               ifelse(between(month, 9, 11), "fall", NA))))))
 
-summer_rh <- synoptic_rh %>% 
-  filter(season == "summer") 
-# find averagessss
+season_rh <- synoptic_rh %>% 
+  group_by(season, year) %>% 
+  summarize(average_RH = mean(RH))
 ```
 
-# season visual
+# Seasonal comparisons
 ```{r}
-summer_rh %>% 
-  ggplot(aes(year, RH)) +
-  geom_point()
+## Visual
+season_rh %>% 
+  ggplot(aes(year, average_RH, color = season)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  facet_wrap(~season)
+
+
+## Linear regression of seasonal data for all season 1935 - 2021, using seasonal averages
+
+# fall
+fall_rh <- season_rh %>% 
+  filter(season == "fall") # isolate fall data
+
+fall.lm = lm(average_RH ~ year, data = fall_rh)
+summary(fall.lm)
+# p-value  = 0.127
+# adjusted r-squared = 0.01574
+
+
+# spring
+spring_rh <- season_rh %>% 
+  filter(season == "spring") # isolate spring data
+
+spring.lm = lm(average_RH ~ year, data = spring_rh)
+summary(spring.lm)
+# p-value  = 0.1129
+# adjusted r-squared = 0.01789
+
+# summer
+summer_rh <- season_rh %>% 
+  filter(season == "summer") # isolate summer data
+
+summer.lm = lm(average_RH ~ year, data = summer_rh)
+summary(summer.lm)
+# p-value  = 0.02197
+# adjusted r-squared = 0.04916
+
+# winter
+winter_rh <- season_rh %>% 
+  filter(season == "winter") # isolate winter data
+
+winter.lm = lm(average_RH ~ year, data = winter_rh)
+summary(winter.lm)
+# p-value  = 0.3717
+# adjusted r-squared = -0.002254 
+
+```
+
+# Monthly comparisons, focusing on November 
+```{r}
+month_rh <- synoptic_rh %>% 
+  group_by(month, year) %>% 
+  summarize(average_RH = mean(RH))
+
+# overview of all months
+ggplot(month_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~month)
+
+# November
+month_rh %>% 
+  filter(month == 11) %>% 
+  ggplot(aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
+
+
 ```
 
