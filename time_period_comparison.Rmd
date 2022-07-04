@@ -1,0 +1,85 @@
+---
+title: "Time Period Comparison"
+author: "Naomi Lubkin"
+date: '2022-07-02'
+output: html_document
+---
+Comparing wind speed data from two time periods: 1940-1980, when wind instruments
+were housed at the old Observatory building, and 1981-2021, when wind instruments
+were housed on the top of the Sherman Adams Building tower. 
+
+#setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(lubridate)
+library(dplyr)
+
+library(LambertW)
+```
+
+
+#Loading in data
+```{r}
+#b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
+monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
+
+#cleaning data
+monthly_avg <- monthly_avg %>%
+  mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
+         monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
+         date = as.Date(date), 
+         month = month(date), 
+         year =year(date)) %>%
+  dplyr::select(date, year, monthly_avg_spd)
+
+
+```
+
+#Creating dataframes for analysis
+NOTE: I'm not positive if the cutoff should be 1980 or 1981. Doing 1981 to be safe (I know SA building was built in 1980, but not sure when exactly that year measurements switched over)
+```{r}
+# dataframe with daily averages 1941-2021
+all_data <- monthly_avg %>%
+  filter(year >= 1940) %>%
+  mutate(era = case_when(year <=1980 ~ 1, 
+                         year >= 1981 ~ 2))
+
+```
+
+
+
+#t-test
+```{r}
+#TESTING ASSUMPTIONS
+#t-tests assume both groups are normally distributed, have equal variances, so need to test for that first
+######################################################################################
+#doing a shapiro wilk test to test for normality 
+#on all data (1941-2021 daily average wind speeds)
+shapiro.test(all_data$monthly_avg_spd)
+hist(all_data$monthly_avg_spd)
+#p-value = 1.359e-11 (less than 0.05, cannot assume normality )
+#tryed various transofmrations, none I tried (log, square, cube) really helped
+#I think because the sample size is so big I can violate this assumption? 
+
+#t-test between the two time periods
+t.test(monthly_avg_spd ~ era, data=all_data)
+#p= 0.0007762
+
+#attempted wilcox test. not sure I need to do one, and results seem funky 
+#(p-value =1, when I don't think two eras are that different. examine more closely before using
+#ran it with alternative=two sided and got almost 0 p-vale instead of p-value 1. need to do more research
+x <- all_data$monthly_avg_spd[all_data$era == 1]
+y <- all_data$monthly_avg_spd[all_data$era == 2]
+wilcox.test(monthly_avg_spd ~ era, data = all_data)
+```
+
+#homoegeneity test? 
+```{r}
+
+```
+

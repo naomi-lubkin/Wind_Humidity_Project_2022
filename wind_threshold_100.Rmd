@@ -1,0 +1,320 @@
+---
+title: "wind_threshold_100"
+author: "Naomi Lubkin"
+output: html_document
+date: '2022-06-30'
+---
+Filtering for events with fog and freezing temperatures, and wind speeds above 100 mph. 
+There are separate rmd files for other wind thresholds. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(dplyr)
+library(lubridate)
+library(gamlss)
+library(gamlss.dist)
+library(gridExtra)
+```
+
+#Loading in the required data
+```{r, echo=FALSE}
+#b16 hourly present weather, split by code, jan 1935-dec 2021
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+
+#b16 hourly daily wind speed, jan 1935-dec2021
+hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv")) 
+
+hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
+```
+
+#Cleaning Data/ setting up required dataframes (GENERAL- for use w/ all thresholds)
+```{r}
+#sorting through present weather dataframe to select for hours with fog
+hourly_fog <- pres_weather %>%
+  mutate(fog= case_when(
+    pw1 == "F" ~"F", 
+    pw2 == "F" ~"F", 
+    pw3 =="F" ~"F", 
+    pw4 == "F" ~"F", 
+    pw5 == "F" ~"F", 
+    pw6 == "F" ~"F", 
+    pw7 == "F" ~"F", 
+    pw8 == "F" ~"F", 
+    pw9 == "F" ~"F", 
+    TRUE ~ "no_fog"))
+hourly_fog <- hourly_fog %>%
+  mutate(fake_fog = case_when (
+    pw1 == "GF" ~ "Y", 
+    pw2 == "GF" ~ "Y",
+    pw3 == "GF" ~ "Y", 
+    pw4 == "GF" ~ "Y", 
+    pw5 == "GF" ~ "Y", 
+    pw6 == "GF" ~ "Y", 
+    pw7 == "GF" ~ "Y", 
+    pw8 == "GF" ~ "Y", 
+    pw9 == "GF" ~ "Y", 
+    TRUE ~ "no_fake_fog")) 
+
+#true fog column returns a Y when "F" (fog) is coded for the hour, and "GF" (intermittent/patches of fog) is not
+hourly_fog <- hourly_fog %>%
+  mutate(true_fog = case_when (
+    (fog == "F") & (fake_fog == "no_fake_fog") ~ "Y", 
+    TRUE ~ as.character(NA)))
+  #dplyr::select(date, fog)
+
+# for sorting by date!
+#TEST_DATE <- subset(hourly_wind, date > "1983-01-01 00:00:00" & date < "1983-01-31 00:00:00")
+
+#making data workable
+xtrm_cond <- merge(hourly_fog, hourly_wind, by = 'date')
+xtrm_cond <- merge(xtrm_cond, hourly_temp, by = 'date') 
+
+#making dates and wind speeds/temps correct data type
+#separating into month, year column so that I can recombine columns into one with just month & year (so I can sort by that later)
+xtrm_cond <- xtrm_cond %>%
+  mutate(date = as.Date(date), 
+         month=month(date), 
+         year = year(date)) %>%
+  mutate(wind_speed = as.numeric(wind_speed), 
+         temperature = as.numeric(temperature))
+
+#combining year and month for analysis purposes
+xtrm_cond$monyear <- str_c(xtrm_cond$month, "-", xtrm_cond$year)
+
+
+#setting up dataframe with a column that returns Y if fog is present and temperature is below freezing
+#USE for all wind thresholds
+coldFog<-xtrm_cond %>%
+  filter(year>1980) %>%
+  mutate(freezefog = case_when((fog == "F") & (temperature < 32) ~ "Y", 
+         TRUE ~ as.character(NA))) 
+
+```
+
+#THRESHOLD: above 100 mph (1981-2021)
+Setting up dataframe
+
+```{r}
+#making a column that returns Y if wind speeds are above 100, temps are below 32, and fog is present
+above100 <- coldFog %>% 
+  mutate(criteria_met= case_when((wind_speed >99) & (freezefog == "Y") ~ "Y", 
+                                 TRUE ~  as.character(NA))) %>%
+  na.omit()
+#counting events by month, making a column with that count, filtering for years later than 1981
+#filtering out all "NA" event counts, or times when 3 requirements not met
+above100 <- above100 %>%
+  count(monyear, criteria_met) %>% separate(monyear, c("month", "year"), sep='-')
+```
+
+above 100 mph: sorting by month
+```{r}
+#Monthly trends: looking at each month separately (Nov-April)
+#Nov
+above100_nov <- above100 %>%
+  filter(month == 11) 
+
+#Dec
+above100_dec <- above100 %>%
+  filter(month == 12)
+
+#Jan
+above100_jan <- above100 %>%
+  filter(month == 1)
+
+#Feb
+above100_feb <- above100 %>%
+  filter(month == 2)
+
+#Mar
+above100_mar <- above100 %>%
+  filter(month == 3)
+
+#Apr
+above100_apr <- above100 %>%
+  filter(month == 4)
+
+
+```
+
+100mph plots: overall and by month
+```{r}
+#overall 
+above100_allmonths <- above100 %>%
+  ggplot(aes(x=year, y=n)) +
+  #geom_bar(stat= "identity") +
+  geom_point() +
+ # geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Extreme Weather Events") +
+  theme_minimal() 
+above100_allmonths
+
+#nov
+above100_nov_plot <- above100_nov %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above100_dec_plot <- above100_dec %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above100_jan_plot <- above100_jan %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above100_feb_plot <- above100_feb %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above100_mar_plot <- above100_mar %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above100_apr_plot <- above100_apr %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#combined plot of extreme events for nov-apr, by individual month
+above100_NovApr_plot <-grid.arrange(above100_nov_plot, above100_dec_plot, above100_jan_plot, above100_feb_plot, above100_mar_plot, above100_apr_plot, 
+                                nrow = 2, 
+                                top = "Fog, Freezing, and Above 100mph Events, 1981-2021")
+
+```
+
+100mph stats
+```{r}
+###Overall 
+
+###By month
+
+##Nov
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 466.878)
+fitDist(n,
+        data = above100_nov, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above100_nov <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above100_nov, 
+                       control = gamlss.control())
+#p-value: 0.895
+summary(mod_above100_nov)
+
+
+##Dec
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 454.493)
+fitDist(n,
+        data = above100_dec, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above100_dec <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above100_dec, 
+                       control = gamlss.control())
+#p-value: 0.867
+summary(mod_above100_dec)
+
+
+##Jan
+#fitting the distribution 
+#Best fit: Poisson Inverse Gaussian (PIG), AIC: 436.871
+fitDist(n,
+        data = above100_jan, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above100_jan <- gamlss(n~year, 
+                       family = PIG(),
+                       data=above100_jan, 
+                       control = gamlss.control())
+#p-value: 0.3669
+summary(mod_above100_jan)
+
+
+##Feb
+#fitting the distribution 
+#Best fit: double poisson (AIC: 449.476)
+fitDist(n,
+        data = above100_feb, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above100_feb <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above100_feb, 
+                       control = gamlss.control())
+#p-value: 0.789
+summary(mod_above100_feb)
+
+
+##Mar
+#fitting the distribution 
+#Best fit: double poisson (AIC: 447.673)
+fitDist(n,
+        data = above45_mar, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_mar <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_mar, 
+                       control = gamlss.control())
+#p-value: 0.994
+summary(mod_above45_mar)
+
+
+##Apr
+#fitting the distribution 
+#Best fit: double poisson (AIC: 425.024 )
+fitDist(n,
+        data = above45_apr, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_apr <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_apr, 
+                       control = gamlss.control())
+#p-value: 0.812
+summary(mod_above45_apr)
+```

@@ -1,5 +1,6 @@
 ---
 title: "Wind Rose"
+author: "Naomi Lubkin"
 output: html_document
 date: '2022-06-21'
 ---
@@ -86,10 +87,8 @@ monthly_spd_dir_byyear <- hourly_spd_dir_rose %>%
 
 #Wind Rose
 ```{r}
-#wind speeds are in mph even though the key says m/s
-#NOTE: should fix that ^
 #this is wind rose from open air package
-wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir_deg", ws="wind_speed", type = "era", paddle= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60))
+wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir_deg", ws="wind_speed", type = "era", paddle= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
 
 
 wind_rose

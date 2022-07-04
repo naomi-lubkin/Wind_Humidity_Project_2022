@@ -1,0 +1,310 @@
+---
+title: "wind_threshold_45"
+author: "Naomi Lubkin"
+output: html_document
+date: '2022-06-29'
+---
+---
+title: "Wind Threshold: above 45 mph"
+output: html_document
+date: '2022-06-29'
+---
+Filtering for events with fog and freezing temperatures, and wind speeds above 45 mph. 
+There are separate rmd files for other wind thresholds.  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(dplyr)
+library(lubridate)
+library(gamlss)
+library(gamlss.dist)
+library(gridExtra)
+```
+
+#Loading in the required data
+```{r, echo=FALSE}
+#b16 hourly present weather, split by code, jan 1935-dec 2021
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+
+#b16 hourly daily wind speed, jan 1935-dec2021
+hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv")) 
+
+hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
+```
+
+#Cleaning Data/ setting up required dataframes (GENERAL- for use w/ all thresholds)
+```{r}
+#sorting through present weather dataframe to select for hours with fog
+hourly_fog <- pres_weather %>%
+  mutate(fog= case_when(
+    pw1 == "F" ~"F", 
+    pw2 == "F" ~"F", 
+    pw3 =="F" ~"F", 
+    pw4 == "F" ~"F", 
+    pw5 == "F" ~"F", 
+    pw6 == "F" ~"F", 
+    pw7 == "F" ~"F", 
+    pw8 == "F" ~"F", 
+    pw9 == "F" ~"F", 
+    TRUE ~ as.character(NA))) %>%
+  dplyr::select(date, fog)
+
+
+#making data workable
+xtrm_cond <- merge(hourly_fog, hourly_wind, by = 'date')
+xtrm_cond <- merge(xtrm_cond, hourly_temp, by = 'date') 
+
+#making dates correct data type
+#separating into month, year column so that I can recombine columns into one with just month + year (so I can sort by that later)
+xtrm_cond <- xtrm_cond %>%
+  mutate(date = as.Date(date), 
+         month=month(date), 
+         year = year(date)) %>%
+  na.omit() 
+
+#combining year and month for analysis purposes
+xtrm_cond$monyear <- str_c(xtrm_cond$month, "-", xtrm_cond$year)
+
+```
+
+#THRESHOLD: above 45 mph (1981-2021)
+Setting up dataframe
+```{r}
+#making the dataframe
+#Y in xtrm column means that that hour had fog, freezing temperatures, AND winds at or above 45 mph (meets all 3 requirements)
+above45 <- xtrm_cond %>%
+  mutate(xtrm= case_when((fog=="F") & (wind_speed >= 45) & (temperature < 32) ~ "Y", 
+         TRUE ~ as.character(NA)))
+
+
+
+#counting events by month, making a column with that count, filtering for years later than 1981
+#filtering out all "NA" event counts, or times when 3 requirements not met
+above45 <- above45 %>%
+  count(monyear, xtrm) %>%
+  separate(monyear, c("month", "year")) %>%
+  filter(year>=1981, 
+         xtrm == 'Y')
+```
+
+above 45 mph: sorting by month
+```{r}
+#Monthly trends: looking at each month separately (Nov-April)
+#Nov
+above45_nov <- above45 %>%
+  filter(month == 11) %>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Dec
+above45_dec <- above45 %>%
+  filter(month == 12)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Jan
+above45_jan <- above45 %>%
+  filter(month == 1)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Feb
+above45_feb <- above45 %>%
+  filter(month == 2)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Mar
+above45_mar <- above45 %>%
+  filter(month == 3)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+#Apr
+above45_apr <- above45 %>%
+  filter(month == 4)%>%
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month))
+
+
+```
+
+45 plots: overall and by month
+```{r}
+#overall 
+above45_allmonths <- above45 %>%
+  ggplot(aes(x=year, y=n)) +
+  #geom_bar(stat= "identity") +
+  geom_point() +
+ # geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Extreme Weather Events") +
+  theme_minimal() 
+above45_allmonths
+
+#nov
+above45_nov_plot <- above45_nov %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above45_dec_plot <- above45_dec %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above45_jan_plot <- above45_jan %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above45_feb_plot <- above45_feb %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above45_mar_plot <- above45_mar %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above45_apr_plot <- above45_apr %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#combined plot of extreme events for nov-apr, by individual month
+above45_NovApr_plot <-grid.arrange(above45_nov_plot, above45_dec_plot, above45_jan_plot, above45_feb_plot, above45_mar_plot, above45_apr_plot, 
+                                nrow = 2, 
+                                top = "Fog, Freezing, and Above 45mph Events, 1981-2021")
+
+```
+
+22 stats
+```{r}
+###Overall 
+
+###By month
+
+##Nov
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 442.113)
+fitDist(n,
+        data = above45_nov, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_nov <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_nov, 
+                       control = gamlss.control())
+#p-value: 0.2032
+summary(mod_above45_nov)
+
+
+##Dec
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 437.82)
+fitDist(n,
+        data = above45_dec, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_dec <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_dec, 
+                       control = gamlss.control())
+#p-value: 0.4175
+summary(mod_above45_dec)
+
+
+##Jan
+#fitting the distribution 
+#Best fit: double poisson, AIC: 448.148
+fitDist(n,
+        data = above45_jan, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_jan <- gamlss(n~year, 
+                       family = DPO(), 
+                       method = nlminb,
+                       data=above45_jan, 
+                       control = gamlss.control())
+#p-value: 0.0999
+summary(mod_above45_jan)
+
+
+##Feb
+#fitting the distribution 
+#Best fit: double poisson (AIC: 444.056)
+fitDist(n,
+        data = above45_feb, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_feb <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_feb, 
+                       control = gamlss.control())
+#p-value: 0.607
+summary(mod_above45_feb)
+
+
+##Mar
+#fitting the distribution 
+#Best fit: double poisson (AIC: 447.673)
+fitDist(n,
+        data = above45_mar, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_mar <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_mar, 
+                       control = gamlss.control())
+#p-value: 0.994
+summary(mod_above45_mar)
+
+
+##Apr
+#fitting the distribution 
+#Best fit: double poisson (AIC: 425.024 )
+fitDist(n,
+        data = above45_apr, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above45_apr <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above45_apr, 
+                       control = gamlss.control())
+#p-value: 0.812
+summary(mod_above45_apr)
+```
+

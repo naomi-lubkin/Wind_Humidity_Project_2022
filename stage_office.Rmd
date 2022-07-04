@@ -1,9 +1,11 @@
 ---
 title: "Stage Office Analysis"
+author: "Naomi Lubkin"
 output: html_document
 date: '2022-06-21'
 ---
-
+Analysis on dataset with wind speed data from both stage office and SA tower, 2020
+Comparing the two to atttempt to see if location plays a significant role in determining wind speed
 ```{r setup, include=FALSE}
 #loading in required packages
 knitr::opts_chunk$set(echo = TRUE)

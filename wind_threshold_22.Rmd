@@ -1,10 +1,11 @@
 ---
-title: "Fog, freezing, above 74mph winds"
+title: "Wind Threshold: above 22 mph"
 author: "Naomi Lubkin"
 output: html_document
-date: '2022-06-21'
+date: '2022-06-29'
 ---
-This is the inital xtrm rmd. Need to go through and make sure it matches the code in the wind_threshold_100.rmd (if there are any differences between the two, I think the 100mph one is correct)
+Filtering for events with fog and freezing temperatures, and wind speeds above 22 mph. 
+There are separate rmd files for other wind thresholds. 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
@@ -12,13 +13,13 @@ setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Clim
 library(here)
 here::here()
 library(dplyr)
-library(gridExtra)
 library(lubridate)
 library(gamlss)
+library(gridExtra)
 ```
 
 #Loading in the required data
-```{r}
+```{r, echo=FALSE}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
 
@@ -28,7 +29,7 @@ hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv"))
 hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
 ```
 
-#Cleaning Data/ setting up required dataframes 
+#Cleaning Data/ setting up required dataframes (GENERAL- for use w/ all thresholds)
 ```{r}
 #sorting through present weather dataframe to select for hours with fog
 hourly_fog <- pres_weather %>%
@@ -43,107 +44,115 @@ hourly_fog <- pres_weather %>%
     pw8 == "F" ~"F", 
     pw9 == "F" ~"F", 
     TRUE ~ as.character(NA))) %>%
-  select(date, fog)
+  dplyr::select(date, fog)
 
-
-#returning dates that meet all 3 requirements (fog, below freezing, strong winds) per year
+#making data workable
 xtrm_cond <- merge(hourly_fog, hourly_wind, by = 'date')
 xtrm_cond <- merge(xtrm_cond, hourly_temp, by = 'date') 
+
+#making dates correct data type
+#separating into month, year column so that I can recombine columns into one with just month + year (so I can sort by that later)
 xtrm_cond <- xtrm_cond %>%
-  mutate(xtrm= case_when((fog=="F") & (wind_speed >= 74) & (temperature < 32) ~ "Y", 
-         TRUE ~ as.character(NA))) %>%
   mutate(date = as.Date(date), 
          month=month(date), 
          year = year(date), 
          monyear = month + year) %>%
-  na.omit() 
+  na.omit()  %>% 
+  mutate(windNumeric = as.numeric(wind_speed))
+
+
 #combining year and month for analysis purposes
 xtrm_cond$monyear <- str_c(xtrm_cond$month, "-", xtrm_cond$year)
+```
 
-count_xtrm <- xtrm_cond %>% 
+#THRESHOLD: above 22 mph (1981-2021)
+Setting up dataframe
+```{r}
+#making the dataframe
+#Y in xtrm column means that that hour had fog, freezing temperatures, AND winds at or above 22 mph (meets all 3 requirements)
+coldFog<-xtrm_cond %>%
+filter(fog == "F" & temperature < 32 & year > 1980) 
+
+above22 <- xtrm_cond %>%
+  mutate(xtrm= case_when((fog=="F") & (wind_speed >= 22) & (temperature < 32) ~ "Y", 
+         TRUE ~ as.character(NA)))
+
+
+
+#counting number of times events w/ all 3 happen per year
+#kinda just for funzies, not using for anything
+count_above22 <- above22 %>% 
   count(year, xtrm)
 
-#counting number of times events with all 3 happen per month / making data workable
-xtrm_month <- xtrm_cond %>%
+
+#counting events by month, making a column with that count, filtering for years later than 1981
+#filtering out all "NA" event counts, or times when 3 requirements not met
+above22 <- above22 %>%
   count(monyear, xtrm) %>%
   separate(monyear, c("month", "year")) %>%
-  filter(year>=1981) 
-      
+  filter(year>=1981, 
+         xtrm == 'Y')
+```
 
-#Monthly trends: looking at each month separately 
+above 22 mph: sorting by month
+```{r}
+#Monthly trends: looking at each month separately (Nov-April)
 #Nov
-xtrm_nov <- xtrm_month %>%
+above22_nov <- above22 %>%
   filter(month == 11) %>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Dec
-xtrm_dec <- xtrm_month %>%
+above22_dec <- above22 %>%
   filter(month == 12)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Jan
-xtrm_jan <- xtrm_month %>%
+above22_jan <- above22 %>%
   filter(month == 1)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Feb
-xtrm_feb <- xtrm_month %>%
+above22_feb <- above22 %>%
   filter(month == 2)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Mar
-xtrm_mar <- xtrm_month %>%
+above22_mar <- above22 %>%
   filter(month == 3)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Apr
-xtrm_apr <- xtrm_month %>%
+above22_apr <- above22 %>%
   filter(month == 4)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #May
-xtrm_may <- xtrm_month %>%
+above22_may <- above22 %>%
   filter(month == 5)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 #Jun
-xtrm_jun <- xtrm_month %>%
+above22_jun <- above22 %>%
   filter(month == 6)%>%
   mutate(year=as.numeric(year), 
          month=as.numeric(month))
 
-
 ```
 
-#Plots: extreme events (all months combined) by year, 1935-2021 and 1981-2021
+22 plots: overall and by month
 ```{r}
-#bar graph of number of events
-xtrm_year_plot_35 <- count_xtrm %>%
-  ggplot(aes(x=year, y=n)) +
-  geom_point(stat= "identity") +
-  labs(x="Year", y="Number of Extreme Weather Events") +
-  theme_minimal()
-
-xtrm_year_plot_35
-
-#same thing but with 1981-2021 data
-xtrm_81 <- count_xtrm %>%
-  filter(year>=1981)
-
-xtrm_year_plot_81 <- xtrm_81 %>%
+#overall 
+above22_allmonths <- above22 %>%
   ggplot(aes(x=year, y=n)) +
   #geom_bar(stat= "identity") +
   geom_point() +
-  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+ # geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
   labs(x="Year", y="Number of Extreme Weather Events") +
-  theme_minimal()
-```
-
-#Plots: broken down by month, 1981-2021
-```{r}
-#Number of extreme events broken down by month, 1981-2021
+  theme_minimal() 
+above22_allmonths
 #nov
-xtrm_nov_plot <- xtrm_nov %>%
+above22_nov_plot <- above22_nov %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -153,7 +162,7 @@ xtrm_nov_plot <- xtrm_nov %>%
 
 
 #dec
-xtrm_dec_plot <- xtrm_dec %>%
+above22_dec_plot <- above22_dec %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -163,7 +172,7 @@ xtrm_dec_plot <- xtrm_dec %>%
 
 
 #jan
-xtrm_jan_plot <- xtrm_jan %>%
+above22_jan_plot <- above22_jan %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -173,7 +182,7 @@ xtrm_jan_plot <- xtrm_jan %>%
 
 
 #feb
-xtrm_feb_plot <- xtrm_feb %>%
+above22_feb_plot <- above22_feb %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -183,7 +192,7 @@ xtrm_feb_plot <- xtrm_feb %>%
 
 
 #mar
-xtrm_mar_plot <- xtrm_mar %>%
+above22_mar_plot <- above22_mar %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -193,7 +202,7 @@ xtrm_mar_plot <- xtrm_mar %>%
 
 
 #apr
-xtrm_apr_plot <- xtrm_apr %>%
+above22_apr_plot <- above22_apr %>%
   ggplot(aes(x=year, y=n)) +
   geom_point() +
   geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
@@ -201,132 +210,112 @@ xtrm_apr_plot <- xtrm_apr %>%
   theme(axis.text.x = element_text(angle = 60)) +
   ggtitle("April")
 
-
-#may
-xtrm_may_plot <- xtrm_may %>%
-  ggplot(aes(x=year, y=n)) +
-  geom_point() +
-  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
-  labs(x="Year", y="Number of Events") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  ggtitle("May")
-
-
-#june
-xtrm_jun_plot <- xtrm_jun %>%
-  ggplot(aes(x=year, y=n)) +
-  geom_point() +
-  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
-  labs(x="Year", y="Number of Events") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  ggtitle("June")
-
-
 #combined plot of extreme events for nov-apr, by individual month
-#grid.by giving me some trouble, maybe try patchwork?
-extreme_NovApr_plot <-grid.arrange(xtrm_nov_plot, xtrm_dec_plot, xtrm_jan_plot, xtrm_feb_plot, xtrm_mar_plot, xtrm_apr_plot, 
+above22_NovApr_plot <-grid.arrange(above22_nov_plot, above22_dec_plot, above22_jan_plot, above22_feb_plot, above22_mar_plot, above22_apr_plot, 
                                 nrow = 2, 
-                                top = "Number of Extreme Weather Events by Month, 1981-2021")
-extreme_NovApr_plot
+                                top = "Fog, Freezing, and Above 22mph Events, 1981-2021")
+
 ```
 
-#Models 
+22 stats
 ```{r}
-#Stats!
-#All Years
-hist(xtrm_month$n)
+###Overall 
+
+###By month
+
+##Nov
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 462.097)
 fitDist(n,
-        data = xtrm_month, 
+        data = above22_nov, 
         type = "counts", 
         try.gamlss = T)
-#best fit: ZAMBI (Zero Altered Negative binomial type I) (AIC=3138.92)
-
-histDist(xtrm_month$n, 
-         "ZANBI", 
-         density = T, 
-         main = "Number of Extreme Events compared to Negative bionomial type I", 
-         xlab = "Number Extreme")
-#not a fantastic fit 
-
-descdist(xtrm_month$n)
-#squarely w/i beta, but beta is for continuous values btwn 0-1 so is innappropriate
-
-mod_xtrm_all <- gamlss(n ~ year,
-                       family = ZANBI(mu.link = "log", sigma.link = "log", nu.link = "logit"), 
-                       data = xtrm_month, 
-                       control = gamlss.control())
-summary(mod_xtrm_all)
-
-#Just November
-#best fit: double poisson (AIC=343.852)
-fitDist(n,
-        data = xtrm_nov, 
-        type = "counts", 
-        try.gamlss = T)
-mod_xtrm_nov <- gamlss(n~year, 
+#model
+mod_above22_nov <- gamlss(n~year, 
                        family = DPO(), 
-                       data=xtrm_nov, 
+                       data=above22_nov, 
                        control = gamlss.control())
-summary(mod_xtrm_nov)
+#p-value: 0.788
+summary(mod_above22_nov)
 
-#Just December
-#best fit: Double poisson (DPO), AIC=376.478
+
+##Dec
+#fitting the distribution 
+#Best fit: Double Poisson (AIC: 446.364)
 fitDist(n,
-        data = xtrm_dec, 
+        data = above22_dec, 
         type = "counts", 
         try.gamlss = T)
-mod_xtrm_dec <- gamlss(n~year, 
+#model
+mod_above22_dec <- gamlss(n~year, 
                        family = DPO(), 
-                       data=xtrm_dec, 
+                       data=above22_dec, 
                        control = gamlss.control())
-summary(mod_xtrm_dec)
+#p-value: 0.788
+summary(mod_above22_dec)
 
-#Just January
-#best fit: Double poisson (DPO), AIC=404.077
+
+##Jan
+#fitting the distribution 
+#Best fit: Negative binomial type II (NBII), AIC: 443.215
 fitDist(n,
-        data = xtrm_jan, 
+        data = above22_jan, 
         type = "counts", 
         try.gamlss = T)
-mod_xtrm_jan <- gamlss(n~year, 
-                       family = DPO(), 
-                       data=xtrm_jan, 
-                       control = gamlss.control())
-summary(mod_xtrm_jan)
-
-#Just February 
-#best fit: negative bionomial type II (NBII), AIC=378.301
-fitDist(n,
-        data = xtrm_feb, 
-        type = "counts", 
-        try.gamlss = T)
-mod_xtrm_feb <- gamlss(n~year, 
+#model
+mod_above22_jan <- gamlss(n~year, 
                        family = NBII(), 
-                       data=xtrm_feb, 
+                       data=above22_jan, 
                        control = gamlss.control())
-summary(mod_xtrm_feb)
+#p-value: 0.20992
+summary(mod_above22_jan)
 
-#Just March 
-#best fit: Double poisson (DPO), AIC=375.277
+
+##Feb
+#fitting the distribution 
+#Best fit: double poisson (AIC: 448.278)
 fitDist(n,
-        data = xtrm_mar, 
+        data = above22_feb, 
         type = "counts", 
         try.gamlss = T)
-mod_xtrm_mar <- gamlss(n~year, 
+#model
+mod_above22_feb <- gamlss(n~year, 
                        family = DPO(), 
-                       data=xtrm_mar, 
+                       data=above22_feb, 
                        control = gamlss.control())
-summary(mod_xtrm_mar)
+#p-value: 0.401
+summary(mod_above22_feb)
 
-#Just April
-#Best fit Poisson Inverse Gaussian (PIG), AIC= 325.018
+
+##Mar
+#fitting the distribution 
+#Best fit: double poisson (AIC: 447.094)
 fitDist(n,
-        data = xtrm_apr, 
+        data = above22_mar, 
         type = "counts", 
         try.gamlss = T)
-mod_xtrm_apr <- gamlss(n~year, 
-                       family = PIG(), 
-                       data=xtrm_apr, 
+#model
+mod_above22_mar <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above22_mar, 
                        control = gamlss.control())
-summary(mod_xtrm_apr)
+#p-value: 0.675
+summary(mod_above22_mar)
+
+
+##Apr
+#fitting the distribution 
+#Best fit: double poisson (AIC: 442.415
+fitDist(n,
+        data = above22_apr, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above22_apr <- gamlss(n~year, 
+                       family = DPO(), 
+                       data=above22_apr, 
+                       control = gamlss.control())
+#p-value: 0.930
+summary(mod_above22_apr)
 ```
 

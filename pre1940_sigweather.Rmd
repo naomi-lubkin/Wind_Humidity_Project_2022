@@ -1,0 +1,158 @@
+---
+title: "Solving the mystery of more sig. weather events pre- 1940"
+author: "Naomi Lubkin"
+output: html_document
+date: '2022-06-30'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+```{r}
+#b16 hourly present weather, split by code, jan 1935-dec 2021
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+
+#b16 hourly daily wind speed, jan 1935-dec2021
+hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv")) 
+
+hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
+
+
+
+#sorting through present weather dataframe to select for hours with fog
+#NOTE: go through to make the column codes less confusing!!!
+#F in fog column means fog was coded during that hour, no_fog means it was not
+hourly_fog <- pres_weather %>%
+  mutate(fog= case_when(
+    pw1 == "F" ~"F", 
+    pw2 == "F" ~"F", 
+    pw3 =="F" ~"F", 
+    pw4 == "F" ~"F", 
+    pw5 == "F" ~"F", 
+    pw6 == "F" ~"F", 
+    pw7 == "F" ~"F", 
+    pw8 == "F" ~"F", 
+    pw9 == "F" ~"F", 
+    TRUE ~ "no_fog"))
+#Y in fake_fog column means that intermittent/patches of fog was coded during that hour, no_fake_fog means it was not
+hourly_fog <- hourly_fog %>%
+  mutate(fake_fog = case_when (
+    pw1 == "GF" ~ "Y", 
+    pw2 == "GF" ~ "Y",
+    pw3 == "GF" ~ "Y", 
+    pw4 == "GF" ~ "Y", 
+    pw5 == "GF" ~ "Y", 
+    pw6 == "GF" ~ "Y", 
+    pw7 == "GF" ~ "Y", 
+    pw8 == "GF" ~ "Y", 
+    pw9 == "GF" ~ "Y", 
+    TRUE ~ "no_fake_fog")) 
+
+#true_fog column returns a Y when "F" (fog) is coded for the hour, and "GF" (intermittent/patches of fog) is not
+hourly_fog <- hourly_fog %>%
+  mutate(true_fog = case_when (
+    (fog == "F") & (fake_fog == "no_fake_fog") ~ "Y", 
+    TRUE ~ as.character(NA))) %>%
+  dplyr::select(date, true_fog)
+
+
+#returning dates that meet all 3 requirements (fog, below freezing, strong winds) per year
+xtrm_cond <- merge(hourly_fog, hourly_wind, by = 'date')
+xtrm_cond <- merge(xtrm_cond, hourly_temp, by = 'date') 
+xtrm_cond <- xtrm_cond %>%
+  mutate(xtrm= case_when((true_fog=="Y") & (wind_speed >= 74) & (temperature < 32) ~ "Y", 
+         TRUE ~ as.character(NA))) %>%
+  mutate(date = as.Date(date), 
+         month=month(date), 
+         year = year(date), 
+         monyear = month + year) %>%
+  na.omit() 
+#combining year and month for analysis purposes
+xtrm_cond$monyear <- str_c(xtrm_cond$month, "-", xtrm_cond$year)
+
+count_xtrm <- xtrm_cond %>% 
+  count(year, xtrm)
+
+#counting number of times events with all 3 happen per month / making data workable
+xtrm_month <- xtrm_cond %>%
+  count(monyear, xtrm) %>%
+  separate(monyear, c("month", "year")) 
+```
+
+Making count data for just fog, just temps
+```{r}
+#counting the number of "true fog" hours by year, and filtering out the NA hour counts
+#and also making dates the right data type/a year column so plotting is easier
+fog_counts <-  hourly_fog %>%
+  mutate(date = as.Date(date), 
+         year = year(date)) %>%
+  count(true_fog, year) %>%
+  filter(true_fog == "Y")
+
+#temp dataframe
+#making a "freezing" column that returns Y if temp is 32 or below, and NA if above
+#and also making dates the right data type/a year column so plotting is easier
+hourly_temp <- hourly_temp %>%
+  mutate(temperature= as.numeric(temperature), 
+         date = as.Date(date), 
+         year = year(date)) %>%
+  mutate(freezing = case_when(temperature <=32 ~ "Y", 
+                  TRUE ~ as.character(NA))) 
+#counting the number of below freezing hours per year, and filtering out NA hours (above freezing hours)
+temp_counts <- hourly_temp %>%
+  count(freezing, year) %>%
+  filter(freezing == "Y") 
+
+#winds: 74mph or above
+hourly_wind <- hourly_wind %>%
+  mutate(wind_speed = as.numeric(wind_speed), 
+         date = as.Date(date), 
+         year = year(date)) %>%
+  mutate(windy = case_when(wind_speed >=74 ~ "Y", 
+                   TRUE ~ as.character(NA)))
+
+wind_74_counts <- hourly_wind  %>% 
+  count(windy, year) %>%
+  filter(windy == "Y")
+```
+
+Plots
+```{r}
+#Plotting fog 1935-2021
+overall_plot <- count_xtrm %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point(stat= "identity") +
+  labs(x="Year", y="Number of Extreme Weather Events 1935-2021") +
+  theme_minimal()
+#overall_plot <- xtrm_cond %>%
+
+#plotting number of fog hours 1935-2021 
+fog_plot <- fog_counts %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  labs(x= "Year", y= "Number of Fog Hours")
+
+
+
+#plotting below freezing temps 1935-2021
+temp_plot <- temp_counts %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  labs(x= "Year", y= "Number of Hours Below Freezing")
+
+#wind plot (hours with 74mph wind averages, or greater)
+wind_74_plot <- wind_74_counts %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point() +
+  labs(x= "Year", y= "Number of Hours Above 74mph Average")
+
+```
+
