@@ -20,6 +20,7 @@ library(lubridate)
 library(dplyr)
 
 library(LambertW)
+library(climatol)
 ```
 
 
@@ -78,8 +79,15 @@ y <- all_data$monthly_avg_spd[all_data$era == 2]
 wilcox.test(monthly_avg_spd ~ era, data = all_data)
 ```
 
-#homoegeneity test? 
+#Attempt at automatic homogenization of climatological series (1940-2021)
 ```{r}
+#first need to convert data from csv into txt file
+'WIND_1940-2021.dat' <- monthly_avg %>% 
+  filter(year(date) >= 1940) %>%
+  mutate(wind = monthly_avg_spd) %>% 
+    dplyr::select(date, wind) 
+
+#also need a text file with station coordinates for homogen to run 
 
 ```
 
