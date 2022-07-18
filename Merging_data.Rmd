@@ -16,6 +16,7 @@ setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Clim
 library(here)
 here::here()
 library(dplyr)
+library(patchwork)
 ```
 
 # data
@@ -32,20 +33,23 @@ synoptic <- read_csv("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind an
 
 ```
 
-#RH calculations (above 32F)
+# Clean synoptic data
 ```{r}
-# Clean data
-
 synoptic <- synoptic %>% 
   filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
   mutate(dry_bulb = as.numeric(dry_bulb), 
          wet_bulb = as.numeric(wet_bulb), 
          pressure_mb = as.numeric(pressure_mb), 
          precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
-  filter(wet_bulb <= dry_bulb) # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+  filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+  filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
+  filter() # UPDATE: no 20 degress increases between readings
 
+  
+```
 
-
+# Calculate Relative Humidity 
+```{r}
 
 # Calculations from WMO annex 4.B
 
@@ -55,39 +59,96 @@ synoptic_rh_liquid <- synoptic %>%
 synoptic_rh_ice <- synoptic %>% 
   filter(wet_bulb < 32)
 
-# as of 6.29.22 calculations favor liquid measurements
+## calculations for water
 # saturation vapor pressure
-f_p_ice <- 1.0016+3.15*(10^-6)*(synoptic_rh_ice$pressure_mb)-0.074*(synoptic_rh_ice$pressure_mb)^-1 # function of pressure
 f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074*(synoptic_rh_liquid$pressure_mb)^-1
 
 sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb))) # saturation vapor pressure for pure water
 sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
   
-sat_vap_p_ice_pure <- 6.112^(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb)))  # saturation vapor pressure for pure ice
-sat_vap_p_ice_moist <- f_p_ice*sat_vap_p_ice_pure  # saturation vapor pressure for moist ice?
-
-# Dew point and Frost point (not needed)
-
-
 # psychometric formulas for the Assmann psychrometer
 water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
 
 # Relative humidity
-rh <- 100*water_vap_p/sat_vap_p_water_moist
-
-
+rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
 
 
 
 # liquid tibble
 synoptic_rh_liquid <- synoptic_rh_liquid %>% 
-  mutate(RH = rh, water_vap_p = water_vap_p) 
+  mutate(RH = rh_liquid) 
 synoptic_rh_liquid
 
+# count how many negative values in "synoptic_RH_liquid"
+nrow(synoptic_rh_liquid[synoptic_rh_liquid$RH<0,])
+  # 0 negative out of 52,560 rows
+
+
+
+
+
+
+
+
+
+## calculations for ice
+
+synoptic_rh_ice <- synoptic %>% 
+  filter(wet_bulb < 32)
+
+f_p_ice <- 1.0016+(3.15*(10^-6))*(synoptic_rh_ice$pressure_mb)-0.074/synoptic_rh_ice$pressure_mb
+
+sat_vap_p_ice_pure_t <- 6.112*(exp(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb))))
+sat_vap_p_ice_moist_t <- sat_vap_p_ice_pure_t*f_p_ice
+
+sat_vap_p_ice_pure_tw <- 6.112*(exp(22.46*(synoptic_rh_ice$wet_bulb)/(272.62+(synoptic_rh_ice$wet_bulb))))
+sat_vap_p_ice_moist_tw <- sat_vap_p_ice_pure_tw*f_p_ice
+
+ice_vap_p <- sat_vap_p_ice_pure_t - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+frost_pt <- (272.62*(log(ice_vap_p/6.112*f_p_ice)))/(22.46-(log(ice_vap_p/6.112*f_p_ice)))
+
+sat_vap_p_from_frost <- 6.112*(exp(22.46*(frost_pt)/(272.62+(frost_pt))))
+vap_p_from_frost <- sat_vap_p_from_frost - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+rh_ice <- 100*(vap_p_from_frost/sat_vap_p_from_frost)
+
+# ice tibble
+synoptic_rh_ice <- synoptic_rh_ice %>% 
+  mutate(RH = rh_ice) 
+synoptic_rh_ice
+
+
+
+# count how many negative values in "synoptic_RH_ice"
+nrow(synoptic_rh_ice[synoptic_rh_ice$RH<0,])
+  # 73 negative out of 70,874 rows
+
+# percent with negative RH in "synoptic_RH_ice"
+73/70874 # 0.1%
 ```
+
+# Join together liquid and ice
+```{r}
+rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
+
+# count how many negative values in "synoptic_RH_ice"
+nrow(rh[rh$RH<0,])
+  # 73 negative out of 70,874 rows
+
+# percent with negative RH in "synoptic_RH_ice"
+73/70874 # 0.1%
+
+# filter out negative rh
+rh <- rh %>% 
+  filter(RH >= 0)
+```
+
 # fog data stuff
 ```{r}
-#fog dataset with present weather to determine fog
+##FOG: present weather codes
+#sorting through present weather dataframe to select for hours with fog
+#"F" means fog was coded for the previous hour, "no_fog" means no fog coded 
 hourly_fog <- pres_weather %>%
   mutate(fog= case_when(
     pw1 == "F" ~"F", 
@@ -100,6 +161,8 @@ hourly_fog <- pres_weather %>%
     pw8 == "F" ~"F", 
     pw9 == "F" ~"F", 
     TRUE ~ "no_fog"))
+#"Y" means there was GF (intermittent/patchy fog) coded for the previous hour. 
+#no_fake_fog means that GF was NOT coded 
 hourly_fog <- hourly_fog %>%
   mutate(fake_fog = case_when (
     pw1 == "GF" ~ "Y", 
@@ -112,16 +175,17 @@ hourly_fog <- hourly_fog %>%
     pw8 == "GF" ~ "Y", 
     pw9 == "GF" ~ "Y", 
     TRUE ~ "no_fake_fog")) 
-
+#true fog column returns a Y when "F" (fog) is coded for the hour, and "GF" (intermittent/patches of fog) is not
+#selecting just for fog and date columns, because those are needed for the merge
 hourly_fog_pres <- hourly_fog %>%
   mutate(true_fog = case_when (
-    (fog == "F") & (fake_fog == "no_fake_fog") ~ "Y", 
-    TRUE ~ as.character(NA))) %>%
+    (fog == "F") & (fake_fog == "no_fake_fog") ~ "F", 
+    TRUE ~ "NF")) %>%
   dplyr::select(true_fog, date) %>%
   mutate(date = floor_date(hourly_fog$date, unit = "hour"))
 
 #fog dataset with RH to determine fog
-#(will go here eventually)
+#(will go here eventually, need RH's with below freezing)
 
 
 ```
@@ -129,42 +193,201 @@ hourly_fog_pres <- hourly_fog %>%
 
 #merge synoptic_rh_liquid with hourly_wind
 ```{r}
+#filter for years of interest (1981-2021)
 hourly_wind <- hourly_wind %>% 
   filter(year(date) >= 1981)
 
+#round hourly wind data down to the nearest hour
 hourly_wind <- hourly_wind %>% 
   mutate(date = floor_date(hourly_wind$date, unit = "hour"))
 
+#round up hour
 hourly_temp <- hourly_temp %>% 
-  mutate(date = floor_date(hourly_temp$date, unit = "hour"), temperature = as.numeric(temperature))
+  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"), temperature = as.numeric(temperature))
 
-merged_data <- merge(synoptic_rh_liquid, hourly_wind, by = 'date') %>% 
+# round down hour for fog
+hourly_fog_pres <- hourly_fog_pres %>% 
+  mutate(date = floor_date(hourly_fog_pres$date, unit = "hour"))
+
+#merge RH and hourly wind data
+merged_data <- merge(rh, hourly_wind, by = 'date') %>% 
   dplyr::select(date, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  wind_speed)
 
+#and merge in hourly temp data
 merged_data <- merge(hourly_temp, merged_data, by = 'date')
-merged_data <- merge(hourly_fog, merged_data, by ='date')
+#and merge in hourly fog data
+merged_data <- merge(hourly_fog_pres, merged_data, by ='date')  
+#and select relevant columns
+merged_data <- merged_data %>% 
+  dplyr::select(date, true_fog, temperature, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  wind_speed)
 
+#checking temp overlap
 ggplot(merged_data, aes(date, temperature)) +
   geom_line() +
-  geom_line(aes(x = date, y = dry_bulb), col = "red")
+  geom_line(aes(x = date, y = dry_bulb), col = "red", alpha = 0.5)
 ```
+#COMPARISON: fog w/ pres weather codes (F and no GF) vs. fog w/ RH (rh>=96%)
+```{r}
+#analyzing what % of time pres weather codes and RH match
+
+#making a column that returns "F" if RH is 96% or above
+
+fog_comparison <- merged_data %>% 
+  mutate(fog_rh = ifelse((RH>=96), "F", "NF")) %>%
+  rename(fog_pres = true_fog) %>%
+  mutate(match = ifelse(fog_rh == fog_pres, "y_match", "n_match")) %>%
+  mutate(date = as.Date(date), 
+         month=month(date), 
+         year = year(date)) 
+fog_comparison$monyear <- str_c(fog_comparison$month, "-", fog_comparison$year)
+fog_comparison <- fog_comparison %>%
+  dplyr::select(date, match, fog_pres, fog_rh, RH, temperature, dry_bulb, wet_bulb, monyear)
+
+#getting count data for y/n  fog hours (respectively) for each monyear
+count_fogs <- fog_comparison %>%
+  count(match, monyear) %>%
+  filter(match == "y_match")
+fog_sums <- aggregate(n ~ monyear, count_fogs, FUN = sum)
+fog_proportions <- merge(fog_sums, count_fogs, by = "monyear") %>%
+  rename(y_match = n.y, 
+         total = n.x) %>%
+  separate(monyear, c("month", "year"), sep='-') %>%
+  mutate(proportion = y_match/total) %>%
+  mutate(year=as.numeric(year))
+
+
+```
+
+
+#Plotting proportion of time that fog reported by pres weather vs RH matches 
+
+```{r}
+#comparison overall
+plot_fogprop_overall <- fog_proportions %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point()
+
+#comparison by month
+#first, making dataframes
+#nov
+prop_nov <- fog_proportions %>%
+  filter(month == 11)
+
+#dec
+prop_dec <- fog_proportions %>%
+  filter(month == 12)
+
+#jan
+prop_jan <- fog_proportions %>%
+  filter(month == 1)
+
+#feb
+prop_feb <- fog_proportions %>%
+  filter(month == 2)
+
+#mar
+prop_mar <- fog_proportions %>%
+  filter(month == 3)
+
+#apr
+prop_apr <- fog_proportions %>%
+  filter(month == 4)
+
+#may
+prop_may <- fog_proportions %>%
+  filter(month == 5)
+
+#jun
+prop_jun <- fog_proportions %>%
+  filter(month == 6)
+
+#and plotting by month
+#nov 
+plot_prop_nov <- prop_nov %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("November") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion") 
+
+#dec
+plot_prop_dec <- prop_dec %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("December") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#jan
+plot_prop_jan <- prop_jan %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("January") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#feb
+plot_prop_feb <- prop_feb %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("February") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#mar
+plot_prop_mar <- prop_mar %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("March") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#apr
+plot_prop_apr <- prop_apr %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("April") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#may
+plot_prop_may <- prop_may %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("May") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#jun
+plot_prop_jun <- prop_jun %>%
+  ggplot(aes(x=year, y=proportion)) +
+  geom_point() +
+  ggtitle("June") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  labs(x="Year", y="Proportion")
+
+#combo of months plot
+(plot_prop_nov | plot_prop_dec | plot_prop_jan | plot_prop_feb) / 
+  (plot_prop_mar | plot_prop_apr | plot_prop_may | plot_prop_jun) + plot_annotation(title = "Proportion of times RH fog matches coded fog, by month")
+  
+
+```
+
+
+
 
 #looking at events of note (freezing, fog, high winds) by month, with RH instead of present weather codes to determine fog
 ## Making datasets for each wind threshold, and for temp
+#NOTE: I (Naomi) have not actually done this yet, have just set up datasets for when I eventually get around to doing it (/does it need to be done?)
 ```{r}
-#22 mph wind threshold
-wind_22 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >21 ~ "Y", 
+#25 mph wind threshold
+wind_25 <- hourly_wind %>% 
+  mutate(windy = case_when (wind_speed >24 ~ "Y", 
                             TRUE ~ as.character(NA)))
 
-#45 mph wind threshold
-wind_45 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >44 ~ "Y", 
-                            TRUE ~ as.character(NA)))
-
-#74 mph wind threshold
-wind_74 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >73 ~ "Y", 
+#60 mph wind threshold
+wind_60 <- hourly_wind %>% 
+  mutate(windy = case_when (wind_speed >59 ~ "Y", 
                             TRUE ~ as.character(NA)))
 
 #100mph wind threshold
@@ -180,115 +403,4 @@ freezing <- hourly_temp %>%
 ```
 
 
-## merging datasets for analysis
-```{r}
-# merging: fog with pres weather
-coldfog_pres <- merge(hourly_fog_pres, freezing, by = "date" )
-  
-#merging: fog with RH
-#coldfog_RH <- 
-  
-# adding a month and year column to both for analysis
-```
-
-
-## getting count data
-```{r}
-# dataset w pres weather fog
-
-#dataset w RH fog
-```
-
-
-## plotting, by month, datasets w pres weather fog
-```{r}
-#NOVEMBER
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#DECEMBER
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#JANUARY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#FEBRUARY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#MARCH
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#APRIL
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#MAY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-
-```
-
-## plotting, by month, datasets w RH fog
-```{r}
-#NOVEMBER
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#DECEMBER
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#JANUARY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#FEBRUARY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#MARCH
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#APRIL
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-
-#MAY
-#22 mph
-#45 mph
-#74 mph
-#100 mph
-```
 
