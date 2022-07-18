@@ -35,14 +35,18 @@ monthly_avg <- monthly_avg %>%
          monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
          date = as.Date(date), 
          month = month(date), 
-         year =year(date)) %>%
-  dplyr::select(date, year, monthly_avg_spd)
+         year =year(date)) 
+
+wind_spd <- monthly_avg %>%
+  filter(year>=1940) %>% 
+  dplyr::select(monthly_avg_spd) %>% 
+  rename(wind = monthly_avg_spd)
 
 
 ```
 
 #Creating dataframes for analysis
-NOTE: I'm not positive if the cutoff should be 1980 or 1981. Doing 1981 to be safe (I know SA building was built in 1980, but not sure when exactly that year measurements switched over)
+
 ```{r}
 # dataframe with daily averages 1941-2021
 all_data <- monthly_avg %>%
@@ -81,13 +85,31 @@ wilcox.test(monthly_avg_spd ~ era, data = all_data)
 
 #Attempt at automatic homogenization of climatological series (1940-2021)
 ```{r}
+#temp working directory
+wd <- tempdir()
+wd0 <- setwd(wd)
+write.table(wind_spd, file = "wind_1940-2021.dat", col.names=FALSE, row.names = FALSE)
 #first need to convert data from csv into txt file
-'WIND_1940-2021.dat' <- monthly_avg %>% 
-  filter(year(date) >= 1940) %>%
-  mutate(wind = monthly_avg_spd) %>% 
-    dplyr::select(date, wind) 
+
+ # write.table(file = 'wind_1941-2021.dat.txt', sep= ",", col.names = FALSE, row.names = FALSE)
+
+
 
 #also need a text file with station coordinates for homogen to run 
+X <- c(44.27,44.270833)
+Y <- c(71.303611, 71.303333)
+Z <- c(1920.85, 1925.422)
+# X <- c(44,44)
+# Y <- c(71, 71)
+# Z <- c(1920, 1925)
+CODE <- c(0, 0)
+NAME <- c("OBS", "SATOWER")
+df <- data.frame(X, Y, Z, CODE, NAME)
+write.table(df, file = 'wind_1941-2021.est', sep=" ", col.names = FALSE, row.names = FALSE)
+#wd <- tempdir()
+#wd0 <- setwd(wd)
+read.table(file = 'wind_1941-2021.est')
 
+homogen("wind", 1941, 2021)
 ```
 

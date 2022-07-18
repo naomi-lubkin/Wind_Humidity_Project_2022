@@ -1,0 +1,57 @@
+---
+title: "Homogenization"
+author: "Naomi Lubkin"
+date: '2022-07-18'
+output: html_document
+---
+Attempt at homogenization of 1940-2021 MWO wind speed data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Homogenization")
+library(tidyverse)
+library(climatol)
+library(snht)
+```
+
+#Loading in data/making dataframes
+```{r}
+#b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
+monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
+
+#cleaning data
+monthly_avg <- monthly_avg %>%
+  mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
+         monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
+         date = as.Date(date), 
+         month = month(date), 
+         year =year(date)) 
+
+wind_spd <- monthly_avg %>%
+  filter(year>=1940) %>% 
+  dplyr::select(monthly_avg_spd) %>% 
+  rename(wind = monthly_avg_spd)
+```
+
+
+```{r}
+#saving wind data as txt file
+write.table(wind_spd, file = "wind_1940-2021.dat", col.names=FALSE, row.names = FALSE)
+
+#making txt file of station information 
+X <- c(44.27,44.270833)
+Y <- c(71.303611, 71.303333)
+Z <- c(1920.85, 1925.422)
+CODE <- c(0, 0)
+NAME <- c("OBS", "SATOWER")
+df <- data.frame(X, Y, Z, CODE, NAME)
+write.table(df, file = 'wind_1941-2021.est', sep=" ", col.names = FALSE, row.names = FALSE)
+
+homogen("wind", 1941, 2021)
+```
+
+#Standard homogenization attempt
+```{r}
+snht()
+```
+
