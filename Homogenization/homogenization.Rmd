@@ -12,6 +12,8 @@ setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Clim
 library(tidyverse)
 library(climatol)
 library(snht)
+library(here)
+library(lubridate)
 ```
 
 #Loading in data/making dataframes
@@ -28,7 +30,7 @@ monthly_avg <- monthly_avg %>%
          year =year(date)) 
 
 wind_spd <- monthly_avg %>%
-  filter(year>=1940) %>% 
+  filter(year>=1941) %>% 
   dplyr::select(monthly_avg_spd) %>% 
   rename(wind = monthly_avg_spd)
 ```
@@ -36,7 +38,7 @@ wind_spd <- monthly_avg %>%
 
 ```{r}
 #saving wind data as txt file
-write.table(wind_spd, file = "wind_1940-2021.dat", col.names=FALSE, row.names = FALSE)
+write.table(wind_spd, file = "wind_1941-2021.dat", col.names=FALSE, row.names = FALSE)
 
 #making txt file of station information 
 X <- c(44.27,44.270833)
@@ -50,8 +52,11 @@ write.table(df, file = 'wind_1941-2021.est', sep=" ", col.names = FALSE, row.nam
 homogen("wind", 1941, 2021)
 ```
 
-#Standard homogenization attempt
+
 ```{r}
-snht()
+#producing an error (sometimes) that says data is not numeric (which it for sure is), so ? 
+wind_snht<- snht(wind_spd, period=80, robust=FALSE, time =NULL)
+summary(wind_snht)
+snht_plot <- plotSNHT(wind_snht, time = NULL, alpha = NULL)
 ```
 
