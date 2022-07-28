@@ -18,8 +18,9 @@ library(lubridate)
 
 #Loading in data/making dataframes
 ```{r}
+#for monthly data
 #b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
-monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
+monthly_avg <- read_csv("b16-hourly monthly wind average 1935-2021.csv")
 
 #cleaning data
 monthly_avg <- monthly_avg %>%
@@ -33,6 +34,18 @@ wind_spd <- monthly_avg %>%
   filter(year>=1941) %>% 
   dplyr::select(monthly_avg_spd) %>% 
   rename(wind = monthly_avg_spd)
+
+#for hourly data
+hourly_avg <- read_csv("b16-hourly wind 1935-2021.csv")
+hourly_avg <- hourly_avg %>%
+  mutate(wind_speed = as.numeric(wind_speed)) %>%
+  filter(year(date)>=1941) 
+
+#daily averages
+daily_avg <- read_csv("b16-hourly daily wind average 1935-2021.csv")
+daily_avg<- daily_avg %>%
+  mutate(wind_speed = as.numeric(daily_avg_speed)) %>%
+  filter(year(date)>=1941)
 ```
 
 
@@ -54,9 +67,21 @@ homogen("wind", 1941, 2021)
 
 
 ```{r}
-#producing an error (sometimes) that says data is not numeric (which it for sure is), so ? 
-wind_snht<- snht(wind_spd, period=80, robust=FALSE, time =NULL)
-summary(wind_snht)
-snht_plot <- plotSNHT(wind_snht, time = NULL, alpha = NULL)
+#SNHT with monthly averages
+#period is months before aug 1981
+wind_snht_monthly<- snht(wind_spd$wind, period=476, robust=FALSE, time =NULL)
+summary(wind_snht_monthly)
+snht_plot <- plotSNHT(wind_spd$wind, wind_snht_monthly, time = NULL, alpha = 0.05)
+
+#SNHT with hourly averages 
+#period is hours before aug 1 1981
+#gets the error: Period is too large to compute statistics
+wind_snht_hourly <- snht(hourly_avg$wind_speed, period = 355729, robust = FALSE, time = NULL)
+
+#SNHT with daily averages
+\#period is days before aug 1 1981
+wind_snht_daily <- snht(daily_avg$wind_speed, period = 14609, robust = FALSE, time = NULL)
+summary(wind_snht_daily)
+snht_plot_daily <- plotSNHT(daily_avg$wind_speed, wind_snht_daily, time=NULL, alpha = 0.05)
 ```
 
