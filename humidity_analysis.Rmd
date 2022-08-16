@@ -4,12 +4,14 @@ author: "Larz von Huene"
 date: '2022-06-06'
 output: html_document
 ---
-
+#Relative humidity calculations and analysis 
 # Packages and set working directory
 ```{r}
 library(tidyverse)
 #library(psychrolib)
 library(lubridate)
+library(trend)
+library(patchwork)
 
 knitr::opts_chunk$set(echo = TRUE)
 setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
@@ -28,9 +30,13 @@ synoptic <- synoptic %>%
          wet_bulb = as.numeric(wet_bulb), 
          pressure_mb = as.numeric(pressure_mb), 
          precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
-  filter(wet_bulb <= dry_bulb) # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+  filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+  filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
+  filter() # UPDATE: no 20 degress increases between readings
 
+  
 ```
+
 
 
 # Calculate Relative Humidity 
@@ -44,29 +50,18 @@ synoptic_rh_liquid <- synoptic %>%
 synoptic_rh_ice <- synoptic %>% 
   filter(wet_bulb < 32)
 
-## calculations 
+## calculations for water
 # saturation vapor pressure
-f_p_ice <- 1.0016+3.15*(10^-6)*(synoptic_rh_ice$pressure_mb)-0.074*(synoptic_rh_ice$pressure_mb)^-1 # function of pressure
 f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074*(synoptic_rh_liquid$pressure_mb)^-1
 
 sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb))) # saturation vapor pressure for pure water
 sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
   
-sat_vap_p_ice_pure <- 6.112^(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb)))  # saturation vapor pressure for pure ice
-sat_vap_p_ice_moist <- f_p_ice*sat_vap_p_ice_pure  # saturation vapor pressure for moist ice?
-
-# Dew point and Frost point (not needed)
-
-
 # psychometric formulas for the Assmann psychrometer
 water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
 
-ice_vap_p <- (6.112^(17.62*(synoptic_rh_ice$wet_bulb)/(243.12+(synoptic_rh_ice$wet_bulb))))*f_p_ice - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
-
 # Relative humidity
 rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
-
-rh_ice <- 100*ice_vap_p/sat_vap_p_ice_moist
 
 
 
@@ -83,20 +78,66 @@ nrow(synoptic_rh_liquid[synoptic_rh_liquid$RH<0,])
 
 
 
-# ice tibble: NEEDS FIXING
+
+
+
+
+## calculations for ice
+
+synoptic_rh_ice <- synoptic %>% 
+  filter(wet_bulb < 32)
+
+f_p_ice <- 1.0016+(3.15*(10^-6))*(synoptic_rh_ice$pressure_mb)-0.074/synoptic_rh_ice$pressure_mb
+
+sat_vap_p_ice_pure_t <- 6.112*(exp(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb))))
+sat_vap_p_ice_moist_t <- sat_vap_p_ice_pure_t*f_p_ice
+
+sat_vap_p_ice_pure_tw <- 6.112*(exp(22.46*(synoptic_rh_ice$wet_bulb)/(272.62+(synoptic_rh_ice$wet_bulb))))
+sat_vap_p_ice_moist_tw <- sat_vap_p_ice_pure_tw*f_p_ice
+
+ice_vap_p <- sat_vap_p_ice_pure_t - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+frost_pt <- (272.62*(log(ice_vap_p/6.112*f_p_ice)))/(22.46-(log(ice_vap_p/6.112*f_p_ice)))
+
+sat_vap_p_from_frost <- 6.112*(exp(22.46*(frost_pt)/(272.62+(frost_pt))))
+vap_p_from_frost <- sat_vap_p_from_frost - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+rh_ice <- 100*(vap_p_from_frost/sat_vap_p_from_frost)
+
+# ice tibble
 synoptic_rh_ice <- synoptic_rh_ice %>% 
   mutate(RH = rh_ice) 
 synoptic_rh_ice
 
+
+
 # count how many negative values in "synoptic_RH_ice"
 nrow(synoptic_rh_ice[synoptic_rh_ice$RH<0,])
-  # 3376 negative out of 70,874 rows
+  # 73 negative out of 70,874 rows
 
 # percent with negative RH in "synoptic_RH_ice"
-3376/70874 # 4.7%
+73/70874 # 0.1%
 ```
 
 
+
+# Join together liquid and ice
+```{r}
+rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
+
+# count how many negative values in "synoptic_RH_ice"
+nrow(rh[rh$RH<0,])
+  # 73 negative out of 70,874 rows
+
+# percent with negative RH in "synoptic_RH_ice"
+73/70874 # 0.1%
+
+# filter out negative rh
+rh <- rh %>% 
+  filter(RH >= 0)
+```
+
+# NOT DOING SEASONAL, CAN IGNORE SEASONAL CODE
 # separate by seasons
 ```{r}
 # seasons by month: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
@@ -167,17 +208,25 @@ summary(winter.lm)
 
 # Monthly comparisons, focusing on November 
 ```{r}
-synoptic_rh_liquid <- synoptic_rh_liquid %>% 
+rh <- rh %>% 
   mutate(month = month(date), year = year(date))
 
-month_rh <- synoptic_rh_liquid %>% 
+month_rh <- rh %>% 
   group_by(month, year) %>% 
   summarize(average_RH = mean(RH))
 
 # overview of all months
 ggplot(month_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~month)
 
-# November
+
+# RH by month
+ggplot(month_rh, aes(as.factor(month), average_RH)) + 
+  geom_boxplot() + 
+  theme_bw() +
+  labs(x = "Month", y = "Relative Humidity (%)") +
+  ggtitle("Average Relative HUmidity by Month 1935-2022")
+
+# November sen slopes
 nov_rh <- month_rh %>% 
   filter(month == 11) 
 
@@ -185,21 +234,49 @@ ggplot(nov_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
 
 nov.lm = lm(average_RH ~ year, data = nov_rh)
 summary(nov.lm)
-# p-value  = 0.64
-# adjusted r-squared = -0.0093
+# p-value  = 0.13
+# adjusted r-squared = 0.01531
+
+nov.sen <- sens.slope(nov_rh$average_RH, conf.level = 0.95)
+View(nov.sen)
+nov.sen[["p.value"]] # 0.3222527
+
+# June
+june_rh <- month_rh %>% 
+  filter(month == 6) 
+
+ggplot(june_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
+
+june.lm = lm(average_RH ~ year, data = june_rh)
+summary(june.lm)
+# p-value: 0.3115
+# adjusted r-squared 0.000425
+
+# September
+sept_rh <- month_rh %>% 
+  filter(month == 9) 
+
+ggplot(sept_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
+
+sept.lm = lm(average_RH ~ year, data = sept_rh)
+summary(sept.lm)
+# p-value: 0.09771
+# adjusted r-squared: 0.02055
+
+sept.sen <- sens.slope(sept_rh$average_RH, conf.level = 0.95)
+View(sept.sen)
+sept.sen[["p.value"]] # 0.07970815
 
 
 # checking with Seidel 2007
-synoptic_rh_liquid %>% 
+rh %>% 
   filter(year(date) <= 2004) %>% 
   summarize(avg = mean(RH))
 
-
-synoptic_rh_liquid %>% 
+rh %>% 
   filter(year(date) <= 2004) %>% 
   filter(month(date) == 6 | month(date) == 7 | month(date) == 8) %>% # for JJA
   summarize(avg = mean(RH))
-
 
 
 ggplot(synoptic_rh_liquid %>%  filter(year(date) <= 1940), aes(date, RH)) + geom_point()
@@ -207,43 +284,326 @@ ggplot(synoptic_rh_liquid %>%  filter(year(date) <= 1940), aes(date, RH)) + geom
 ggplot(month_rh, aes(year, average_RH, col = as.factor(month))) + geom_point()
 ```
 
-
-# Fog data 
 ```{r}
-#sorting through present weather dataframe to select for hours with fog
-hourly_fog <- pres_weather %>%
-  mutate(fog= case_when(
-    pw1 == "F" ~"F", 
-    pw2 == "F" ~"F", 
-    pw3 =="F" ~"F", 
-    pw4 == "F" ~"F", 
-    pw5 == "F" ~"F", 
-    pw6 == "F" ~"F", 
-    pw7 == "F" ~"F", 
-    pw8 == "F" ~"F", 
-    pw9 == "F" ~"F", 
-    TRUE ~ "no_fog"))
-hourly_fog <- hourly_fog %>%
-  mutate(fake_fog = case_when (
-    pw1 == "GF" ~ "Y", 
-    pw2 == "GF" ~ "Y",
-    pw3 == "GF" ~ "Y", 
-    pw4 == "GF" ~ "Y", 
-    pw5 == "GF" ~ "Y", 
-    pw6 == "GF" ~ "Y", 
-    pw7 == "GF" ~ "Y", 
-    pw8 == "GF" ~ "Y", 
-    pw9 == "GF" ~ "Y", 
-    TRUE ~ "no_fake_fog")) 
-
-#not sure why this isn't working
-hourly_fog <- hourly_fog %>%
-  mutate(true_fog = case_when (
-    (fog == "F") & (fake_fog == "no_fake_fog") ~ "Y", 
-    TRUE ~ as.character(NA))) 
+# adding names to months
+month_rh <- month_rh %>% 
+  filter(year >= 1941) %>% # for consistency with wind data
+   mutate(month_name = case_when(month == 1 ~ "January", 
+                                month == 2 ~ "February",
+                                month == 3 ~ "March",
+                                month == 4 ~ "April",
+                                month == 5 ~ "May",
+                                month == 6 ~ "June",
+                                month == 7 ~ "July",
+                                month == 8 ~ "August",
+                                month == 9 ~ "September",
+                                month == 10 ~ "October",
+                                month == 11 ~ "November",
+                                month == 12 ~ "December")) 
+month_rh$month_name <- factor(month_rh$month_name, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))
+  
 
 
-dplyr::select(hourly_fog, date, true_fog)
-
+# RH by month
+ggplot(month_rh, aes(as.factor(month_name), average_RH)) + 
+  geom_boxplot(fill = "grey", outlier.shape = 1) + 
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = "Month", y = "Relative Humidity (%)") +
+  ggtitle("Monthly Average Relative Humidities 1941-2021")
 ```
+
+
+# Improving visual
+
+```{r}
+# JANUARY
+jan_rh <- month_rh %>% 
+  filter(month == 1) 
+
+jan <- ggplot(jan_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("January") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+jan.sen <- sens.slope(jan_rh$average_RH, conf.level = 0.95)
+#View(jan.sen)
+jan.sen[["p.value"]] # 0.8603164
+
+
+
+
+
+
+# FEBRUARY
+feb_rh <- month_rh %>% 
+  filter(month == 2) 
+
+feb <- ggplot(feb_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("February") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+feb.sen <- sens.slope(feb_rh$average_RH, conf.level = 0.95)
+#View(feb.sen)
+feb.sen[["p.value"]] # 0.8603164
+
+
+
+
+
+
+
+# MARCH
+mar_rh <- month_rh %>% 
+  filter(month == 3) 
+
+mar <- ggplot(mar_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("March") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+
+mar.sen <- sens.slope(mar_rh$average_RH, conf.level = 0.95)
+#View(mar.sen)
+mar.sen[["p.value"]] # 0.1726373
+
+
+
+
+
+
+
+
+
+
+# APRIL
+apr_rh <- month_rh %>% 
+  filter(month == 4) 
+
+apr <- ggplot(apr_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("April") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+
+apr.sen <- sens.slope(apr_rh$average_RH, conf.level = 0.95)
+#View(apr.sen)
+apr.sen[["p.value"]] # 0.07360794
+
+
+
+
+
+
+
+# MAY
+may_rh <- month_rh %>% 
+  filter(month == 5) 
+
+may <- ggplot(may_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("May") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+
+may.sen <- sens.slope(may_rh$average_RH, conf.level = 0.95)
+#View(may.sen)
+may.sen[["p.value"]] # 0.1385819
+
+
+
+
+
+
+
+
+# JUNE
+jun_rh <- month_rh %>% 
+  filter(month == 6) 
+
+jun <- ggplot(jun_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("June") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+jun.sen <- sens.slope(jun_rh$average_RH, conf.level = 0.95)
+#View(jun.sen)
+jun.sen[["p.value"]] # 0.4157207
+
+
+
+
+
+# JULY
+jul_rh <- month_rh %>% 
+  filter(month == 7) 
+
+jul <- ggplot(jul_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("July") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+jul.sen <- sens.slope(jul_rh$average_RH, conf.level = 0.95)
+#View(jul.sen)
+jul.sen[["p.value"]] # 0.9357175
+
+
+
+
+
+
+
+
+# AUGUST
+aug_rh <- month_rh %>% 
+  filter(month == 8) 
+
+aug <- ggplot(aug_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("August") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+aug.sen <- sens.slope(aug_rh$average_RH, conf.level = 0.95)
+#View(aug.sen)
+aug.sen[["p.value"]] # 0.2650709
+
+
+
+
+
+
+
+# SEPTEMEBR
+sep_rh <- month_rh %>% 
+  filter(month == 9) 
+
+sep <- ggplot(sep_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("September") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+sep.sen <- sens.slope(sep_rh$average_RH, conf.level = 0.95)
+#View(sep.sen)
+sep.sen[["p.value"]] # 0.07970815
+
+
+
+
+
+
+
+
+
+# OCTOBER
+oct_rh <- month_rh %>% 
+  filter(month == 10) 
+
+oct <- ggplot(oct_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("October") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+oct.sen <- sens.slope(oct_rh$average_RH, conf.level = 0.95)
+#View(oct.sen)
+oct.sen[["p.value"]] # 0.1548998
+
+
+
+
+
+
+
+
+
+
+
+
+# NOVEMBER
+nov_rh <- month_rh %>% 
+  filter(month == 11) 
+
+nov <- ggplot(nov_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("November") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+nov.sen <- sens.slope(nov_rh$average_RH, conf.level = 0.95)
+#View(nov.sen)
+nov.sen[["p.value"]] # 0.3222527
+
+
+
+
+
+
+
+
+
+
+
+
+# DECEMBER
+dec_rh <- month_rh %>% 
+  filter(month == 12) 
+
+dec <- ggplot(dec_rh, aes(year, average_RH)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = F) + 
+  ggtitle("December") + 
+  labs (x = "Year", y = "Relative Humidity (%)") +
+  theme_minimal()
+
+dec.sen <- sens.slope(dec_rh$average_RH, conf.level = 0.95)
+#View(dec.sen)
+dec.sen[["p.value"]] # 0.9473864
+
+
+jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec
+```
+
+# overall RH over years (not split by month)
+```{r}
+year_rh <- rh %>% 
+  group_by(year) %>% 
+  summarize(avg_rh = mean(RH))
+
+
+ggplot(year_rh, aes(year, avg_rh)) +
+  geom_point() +
+  theme_minimal() +
+  ylim(60, 100) +
+  xlim(1941, 2021) + # select only years after 1941 for continuity with wind data
+  labs(x = "Year", y = "Relative Humidity (%)") +
+  ggtitle("Average Relative Humidities 1941-2021")
+
+year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
+View(year.sen)
+year.sen[["p.value"]]
+```
+
+
+
 

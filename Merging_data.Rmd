@@ -4,6 +4,12 @@ author: "Larz von Huene and Naomi Lubkin"
 date: '2022-07-02'
 output: html_document
 ---
+This rmd contains the bulk of the analysis for this project. 
+
+There was analysis done with both the 1981-2021 data and 1941-2021 data (see "homogenization.rmd" for more details on how homogenization was done). It includes RH calculations again, and then plots counts of events with high RH, winds, and freezing temperatures. 
+
+
+
 # Packages
 ```{r}
 library(tidyverse)
@@ -17,15 +23,17 @@ library(here)
 here::here()
 library(dplyr)
 library(patchwork)
+library(gamlss)
+library(pscl) #for hurdle model 
 ```
 
 # data
 ```{r}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
-pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021 (1).csv")
 
 #b16 hourly daily wind speed, jan 1935-dec2021
-hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv")) 
+hourly_wind_raw <- read_csv("Data/b16-hourly wind 1935-2021.csv")
 
 hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
 
@@ -146,9 +154,10 @@ rh <- rh %>%
 
 # fog data stuff
 ```{r}
-##FOG: present weather codes
+##FOG: present weather codes (OUTDATED: for final analysis, we used RH fog and not present weather fog)
 #sorting through present weather dataframe to select for hours with fog
 #"F" means fog was coded for the previous hour, "no_fog" means no fog coded 
+
 hourly_fog <- pres_weather %>%
   mutate(fog= case_when(
     pw1 == "F" ~"F", 
@@ -191,11 +200,16 @@ hourly_fog_pres <- hourly_fog %>%
 ```
 
 
-#merge synoptic_rh_liquid with hourly_wind
+#merge rh with hourly_wind
+#for 1981-2021 (merging wind with homogenized 1941-2021 wind data is below)
 ```{r}
 #filter for years of interest (1981-2021)
-hourly_wind <- hourly_wind %>% 
+hourly_wind <- hourly_wind_raw %>% 
   filter(year(date) >= 1981)
+#filter for other years of interest (1941-2021)
+hourly_wind_41 <- hourly_wind_raw %>% 
+  filter(year(date) >= 1941)
+
 
 #round hourly wind data down to the nearest hour
 hourly_wind <- hourly_wind %>% 
@@ -220,6 +234,10 @@ merged_data <- merge(hourly_fog_pres, merged_data, by ='date')
 #and select relevant columns
 merged_data <- merged_data %>% 
   dplyr::select(date, true_fog, temperature, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  wind_speed)
+
+# making wind_speed numeric
+merged_data <- merged_data %>% 
+  mutate(wind_speed = as.numeric(wind_speed))
 
 #checking temp overlap
 ggplot(merged_data, aes(date, temperature)) +
@@ -367,40 +385,1507 @@ plot_prop_jun <- prop_jun %>%
   labs(x="Year", y="Proportion")
 
 #combo of months plot
-(plot_prop_nov | plot_prop_dec | plot_prop_jan | plot_prop_feb) / 
-  (plot_prop_mar | plot_prop_apr | plot_prop_may | plot_prop_jun) + plot_annotation(title = "Proportion of times RH fog matches coded fog, by month")
+# (plot_prop_nov | plot_prop_dec | plot_prop_jan | plot_prop_feb) / 
+#   (plot_prop_mar | plot_prop_apr | plot_prop_may | plot_prop_jun) + plot_annotation(title = "Proportion of times RH fog matches coded fog, by month")
   
 
 ```
 
 
-
-
-#looking at events of note (freezing, fog, high winds) by month, with RH instead of present weather codes to determine fog
-## Making datasets for each wind threshold, and for temp
-#NOTE: I (Naomi) have not actually done this yet, have just set up datasets for when I eventually get around to doing it (/does it need to be done?)
+##1941-2021!
+#events of note (freezing, fog, high winds) by month, with RH fog and homogenized wind data 1941-2021 (see homogenization.rmd for more details on homogenization)
 ```{r}
-#25 mph wind threshold
-wind_25 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >24 ~ "Y", 
-                            TRUE ~ as.character(NA)))
+#clean data
+homogenized_hourly <- hourly_wind_41 %>% 
+  filter(year(date) >= 1941) %>%
+  mutate(wind_speed = as.numeric(wind_speed)) 
 
-#60 mph wind threshold
-wind_60 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >59 ~ "Y", 
-                            TRUE ~ as.character(NA)))
+homogenized_hourly <- homogenized_hourly %>%
+  mutate(homogenized_wind = ifelse(year(date) <=1981, homogenized_hourly$wind_speed*1.05, homogenized_hourly$wind_speed))
 
-#100mph wind threshold
-wind_100 <- hourly_wind %>% 
-  mutate(windy = case_when (wind_speed >99 ~ "Y", 
-                            TRUE ~ as.character(NA)))
+#round hourly wind data down to the nearest hour
+homogenized_hourly <- homogenized_hourly %>%
+  mutate(date = floor_date(homogenized_hourly$date, unit = "hour"))
 
-#temperature dataset, below freezing temps
-freezing <- hourly_temp %>% 
-  mutate(temp = case_when(temperature < 32 ~ "Y", 
-                          TRUE ~ as.character(NA)))
+#round up hour
+hourly_temp <- hourly_temp %>% 
+  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"), temperature = as.numeric(temperature))
+
+
+#merge RH and homogenized hourly wind data
+merged_data_41 <- merge(rh, homogenized_hourly, by = 'date')
+
+#and merge in hourly temp data
+merged_data_41 <- merge(hourly_temp, merged_data_41, by = 'date')
+
+#and select relevant columns
+merged_data_41 <- merged_data_41 %>% 
+  dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  homogenized_wind)
+
+
+```
+
+#datasets for each wind threshold, 1941-2021
+```{r}
+#25mph threshold
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 25mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+windfog25_41 <- merged_data_41 %>%
+  mutate(wind_fog = ifelse(homogenized_wind >= 25  & RH >= 96 & temperature < 32, "Y", "N"))
+
+
+#60mph threshold
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 60mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+windfog60_41 <- merged_data_41 %>%
+  mutate(wind_fog = ifelse(homogenized_wind >= 60  & RH >= 96 & temperature < 32, "Y", "N"))
+
+#100mph threshold
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 100mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+windfog100_41 <- merged_data_41 %>%
+  mutate(wind_fog = ifelse(homogenized_wind >= 100 & RH >= 96 & temperature < 32, "Y", "N"))
+```
+
+
+#counts of events for each threshold, 1941-2021
+
+```{r}
+#events: 25 mph threshold
+count_total_25_41 <- windfog25_41 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_25_41 <- count_total_25_41 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+counts_25_41 <- merge(count_total_25_41, count_total_events_25_41, by = 'monyear')
+
+counts_final25_41 <- counts_25_41 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+
+
+#events: 60 mph threshold
+count_total_60_41 <- windfog60_41 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_60_41 <- count_total_60_41 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+counts_60_41 <- merge(count_total_60_41, count_total_events_60_41, by = 'monyear')
+
+counts_final60_41 <- counts_60_41 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+
+
+
+#100 mph: getting a column with number of events (or 0)
+#counting the number of events where criteria are met (wind_fog column Y's) and not met (wind_fog N's) for each month and year (ex. Jan 1981 = 1-1981 in monyear column)
+count_total_100_41 <- windfog100_41 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_100_41 <- count_total_100_41 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+
+counts_100_41 <- merge(count_total_100_41, count_total_events_100_41, by = 'monyear')# %>% 
+  #select(monyear, wind_fog, events, total) %>% 
+  #mutate(event_count = ifelse(length(monyear) == 2, events, 0))
+counts_final100_41 <- counts_100_41 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+```
+
+
+#making dataframes for each month, overall and for models, 1941-2021 events
+```{r}
+#25 mph threshold
+#first, each month separately, and then each month with just count and year columns for models
+#oct 
+above25_oct_41 <- counts_final25_41 %>%
+  filter(month == 10)
+above25oct_formod_41 <- above25_oct_41 %>%
+  dplyr::select(count_events, year)
+
+
+#nov
+above25_nov_41 <- counts_final25_41 %>%
+  filter(month == 11)
+above25nov_formod_41 <- above25_nov_41 %>%
+  dplyr::select(count_events, year)
+
+#dec
+above25_dec_41 <- counts_final25_41 %>%
+  filter(month == 12)
+above25dec_formod_41 <- above25_dec_41 %>%
+  dplyr::select(count_events, year)
+
+#jan
+above25_jan_41 <- counts_final25_41 %>%
+  filter(month == 1)
+above25jan_formod_41 <- above25_jan_41 %>%
+  dplyr::select(count_events, year)
+
+#feb
+above25_feb_41 <- counts_final25_41 %>%
+  filter(month == 2)
+above25feb_formod_41 <- above25_feb_41 %>%
+  dplyr::select(count_events, year)
+
+#mar
+above25_mar_41 <- counts_final25_41 %>%
+  filter(month == 3)
+above25mar_formod_41 <- above25_mar_41 %>%
+  dplyr::select(count_events, year)
+
+#apr
+above25_apr_41 <- counts_final25_41 %>%
+  filter(month == 4)
+above25apr_formod_41 <- above25_apr_41 %>%
+  dplyr::select(count_events, year)
+
+#may
+above25_may_41 <- counts_final25_41 %>%
+  filter(month == 5)
+above25may_formod_41 <- above25_may_41 %>%
+  dplyr::select(count_events, year)
+
+#jun
+above25_jun_41 <- counts_final25_41 %>%
+  filter(month == 6)
+above25jun_formod_41 <- above25_jun_41 %>%
+  dplyr::select(count_events, year)
+
+
+# overall
+counts_final25_41_avg <- counts_final25_41 %>% 
+  group_by(year) %>% 
+  summarize(avg = mean(count_events))
+ggplot(counts_final25_41_avg, aes(year, avg)) +
+  geom_point() +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 25 mph Threshold", subtitle = "1941-2021")
+
+#sens slope for overall
+
+t25.sen <- sens.slope(counts_final25_41_avg$avg, conf.level = 0.95)
+View(t25.sen)
+t25.sen[["p.value"]]
+
+
+#above 60 mph wind threshold
+#first, each month separately, and then each month with just count and year columns for models
+#oct 
+above60_oct_41 <- counts_final60_41 %>%
+  filter(month == 10)
+above60oct_formod_41 <- above60_oct_41 %>%
+  dplyr::select(count_events, year)
+
+
+#nov
+above60_nov_41 <- counts_final60_41 %>%
+  filter(month == 11)
+above60nov_formod_41 <- above60_nov_41 %>%
+  dplyr::select(count_events, year)
+
+#dec
+above60_dec_41 <- counts_final60_41 %>%
+  filter(month == 12)
+above60dec_formod_41 <- above60_dec_41 %>%
+  dplyr::select(count_events, year)
+
+#jan
+above60_jan_41 <- counts_final60_41 %>%
+  filter(month == 1)
+above60jan_formod_41 <- above60_jan_41 %>%
+  dplyr::select(count_events, year)
+
+#feb
+above60_feb_41 <- counts_final60_41 %>%
+  filter(month == 2)
+above60feb_formod_41 <- above60_feb_41 %>%
+  dplyr::select(count_events, year)
+
+#mar
+above60_mar_41 <- counts_final60_41 %>%
+  filter(month == 3)
+above60mar_formod_41 <- above60_mar_41 %>%
+  dplyr::select(count_events, year)
+
+#apr
+above60_apr_41 <- counts_final60_41 %>%
+  filter(month == 4)
+above60apr_formod_41 <- above60_apr_41 %>%
+  dplyr::select(count_events, year)
+
+#may
+above60_may_41 <- counts_final60_41 %>%
+  filter(month == 5)
+above60may_formod_41 <- above60_may_41 %>%
+  dplyr::select(count_events, year)
+
+#jun
+above60_jun_41 <- counts_final60_41 %>%
+  filter(month == 6)
+above60jun_formod_41 <- above60_jun_41 %>%
+  dplyr::select(count_events, year)
+
+# overall
+counts_final60_41_avg <- counts_final60_41 %>% 
+  group_by(year) %>% 
+  summarize(avg = mean(count_events))
+ggplot(counts_final60_41_avg, aes(year, avg)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 60 mph Threshold", subtitle = "1941-2021")
+
+#sens slope for overall
+t60.sen <- sens.slope(counts_final60_41_avg$avg, conf.level = 0.95)
+View(t60.sen)
+t60.sen[["p.value"]]
+
+
+
+
+
+
+#above 100 mph wind threshold 
+#first, each month separately, and then each month with just count and year columns for models
+#oct 
+above100_oct_41 <- counts_final100_41 %>%
+  filter(month == 10)
+above100oct_formod_41 <- above100_oct_41 %>%
+  dplyr::select(count_events, year)
+
+#nov
+above100_nov_41 <- counts_final100_41 %>%
+  filter(month == 11)
+above100nov_formod_41 <- above100_nov_41 %>%
+  dplyr::select(count_events, year)
+
+#dec
+above100_dec_41 <- counts_final100_41 %>%
+  filter(month == 12)
+above100dec_formod_41 <- above100_dec_41 %>%
+  dplyr::select(count_events, year)
+
+#jan
+above100_jan_41 <- counts_final100_41 %>%
+  filter(month == 1)
+above100jan_formod_41 <- above100_jan_41 %>%
+  dplyr::select(count_events, year)
+
+#feb
+above100_feb_41 <- counts_final100_41 %>%
+  filter(month == 2)
+above100feb_formod_41 <- above100_feb_41 %>%
+  dplyr::select(count_events, year)
+
+#mar
+above100_mar_41 <- counts_final100_41 %>%
+  filter(month == 3)
+above100mar_formod_41 <- above100_mar_41 %>%
+  dplyr::select(count_events, year)
+
+#apr
+above100_apr_41 <- counts_final100_41 %>%
+  filter(month == 4)
+above100apr_formod_41 <- above100_apr_41 %>%
+  dplyr::select(count_events, year)
+
+#may
+above100_may_41 <- counts_final100_41 %>%
+  filter(month == 5)
+above100may_formod_41 <- above100_may_41 %>%
+  dplyr::select(count_events, year)
+
+#jun
+above100_jun_41 <- counts_final100_41 %>%
+  filter(month == 6)
+above100jun_formod_41 <- above100_jun_41 %>%
+  dplyr::select(count_events, year)
+
+# overall
+counts_final100_41_avg <- counts_final100_41 %>% 
+  group_by(year) %>% 
+  summarize(avg = mean(count_events))
+ggplot(counts_final100_41_avg, aes(year, avg)) +
+  geom_point() +
+  theme_minimal() +
+  scale_y_continuous(breaks = seq(0, 3, by = 1)) +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 100 mph Threshold", subtitle = "1941-2021")
+
+#sens slope for overall
+t100.sen <- sens.slope(counts_final100_41_avg$avg, conf.level = 0.95)
+View(t100.sen)
+t100.sen[["p.value"]]
+
+```
+
+#plots: events 1941-2021
+```{r}
+#25 mph threshold
+#oct
+above25_oct_plot_41 <- above25_oct_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("October")
+
+#nov
+above25_nov_plot_41 <- above25_nov_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above25_dec_plot_41 <- above25_dec_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above25_jan_plot_41 <- above25_jan_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above25_feb_plot_41 <- above25_feb_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above25_mar_plot_41 <- above25_mar_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above25_apr_plot_41 <- above25_apr_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above25_may_plot_41 <- above25_may_41 %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June
+above25_jun_plot_41 <- above25_jun_41 %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 25 mph
+allmonths_25_41 <- (above25_nov_plot_41 | above25_dec_plot_41 | above25_jan_plot_41 | above25_feb_plot_41)/ (above25_mar_plot_41 | above25_apr_plot_41 | above25_may_plot_41 | above25_jun_plot_41) 
+allmonths_25_41  + plot_annotation(title='Fog, Freezing, and above 25 mph wind hours 1941-2021')
+
+
+
+
+
+
+
+#60mph wind threshold
+#oct
+above60_oct_plot_41 <- above60_oct_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("October")
+
+
+#nov
+above60_nov_plot_41 <- above60_nov_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above60_dec_plot_41 <- above60_dec_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above60_jan_plot_41 <- above60_jan_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above60_feb_plot_41 <- above60_feb_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above60_mar_plot_41 <- above60_mar_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above60_apr_plot_41 <- above60_apr_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above60_may_plot_41 <- above60_may_41 %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June 
+above60_jun_plot_41 <- above60_jun_41 %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 60 mph
+allmonths_60_41<- (above60_nov_plot_41 | above60_dec_plot_41 | above60_jan_plot_41| above60_feb_plot_41)/ (above60_mar_plot_41 | above60_apr_plot_41 | above60_may_plot_41 | above60_jun_plot_41) 
+allmonths_60_41  + plot_annotation(title='Fog, Freezing, and above 60 mph wind hours 1941-2021')
+
+
+
+
+
+#100mph wind threshold 
+#oct
+above100_oct_plot_41 <- above100_oct_41 %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("October")
+
+#nov
+above100_nov_plot_41 <- above100_nov_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above100_dec_plot_41  <- above100_dec_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above100_jan_plot_41  <- above100_jan_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above100_feb_plot_41  <- above100_feb_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above100_mar_plot_41  <- above100_mar_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above100_apr_plot_41  <- above100_apr_41  %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above100_may_plot_41  <- above100_may_41  %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June
+above100_jun_plot_41  <- above100_jun_41  %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 100 mph
+allmonths_100_41 <- (above100_nov_plot_41  | above100_dec_plot_41  | above100_jan_plot_41  | above100_feb_plot_41 )/ (above100_mar_plot_41  | above100_apr_plot_41  | above100_may_plot_41  | above100_jun_plot_41 ) 
+allmonths_100_41   + plot_annotation(title='Fog, Freezing, and above 100 mph wind hours 1941-2021')
+
+
+```
+
+#Dealing with zeros: Hurdle Models
+```{r}
+oct_hurdle.mod <- hurdle(count_events ~ year, above100oct_formod_41, dist = "poisson", zero.dist = "poisson")
+summary(oct_hurdle.mod)
+
 
 ```
 
 
+#stats: events 1941-2021
+
+```{r}
+#25 mph threshold
+##Oct
+#fitting the distribution 
+#Best fit: NBI (AIC:  620.494  )
+fitDist(count_events,
+        data = above25oct_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+
+#model
+mod_above25_oct_41 <- gamlss(count_events~year, 
+                       family = NBI(), 
+                       data=above25oct_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.338
+summary(mod_above25_oct_41)
+
+
+##Nov
+#fitting the distribution 
+#Best fit: PIG (AIC:  617.679 )
+fitDist(count_events,
+        data = above25nov_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+
+#model
+mod_above25_nov_41 <- gamlss(count_events~year, 
+                       family = PIG(), 
+                       data=above25nov_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.93
+summary(mod_above25_nov_41)
+
+
+##Dec
+#fitting the distribution 
+#Best fit: DPO (AIC: 601.907 )
+fitDist(count_events,
+        data = above25dec_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_dec_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above25dec_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.234209    
+summary(mod_above25_dec_41)
+
+
+##Jan
+#fitting the distribution 
+#Best fit: DPO, AIC: 624.925 
+fitDist(count_events,
+        data = above25jan_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_jan_41 <- gamlss(count_events~year, 
+                       family = DPO(),
+                       data=above25jan_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.317
+summary(mod_above25_jan_41)
+
+
+##Feb
+#fitting the distribution 
+#Best fit: DPO (AIC: 619.433 )
+fitDist(count_events,
+        data = above25feb_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_feb_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above25feb_formod_41, 
+                       control = gamlss.control(n.cyc = 50))
+#p-value: 0.40553
+summary(mod_above25_feb_41)
+
+
+##Mar
+#fitting the distribution 
+#Best fit: GPO (AIC:  632.089 )
+fitDist(count_events,
+        data = above25mar_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_mar_41 <- gamlss(count_events~year, 
+                       family = GPO(), 
+                       data=above25mar_formod_41, 
+                       control = gamlss.control(n.cyc = 50))
+#p-value: 
+summary(mod_above25_mar_41)
+
+
+##Apr
+#fitting the distribution 
+#Best fit: DPO (AIC: 635.99)
+fitDist(count_events,
+        data = above25apr_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_apr_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above25apr_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.890
+summary(mod_above25_apr_41)
+
+
+##May
+#fitting the distribution 
+#Best fit: PIG, AIC: 620.32 
+(AIC: 635.99)
+fitDist(count_events,
+        data = above25may_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_may_41 <- gamlss(count_events~year, 
+                       family = PIG(), 
+                       data=above25may_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.1725
+summary(mod_above25_may_41)
+
+
+##Jun
+#fitting the distribution 
+#Best fit: DPO (AIC: 441.133 )
+fitDist(count_events,
+        data = above25jun_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above25_jun_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above25jun_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.669
+summary(mod_above25_jun_41)
+
+
+###############################################################################
+#60mph threshold
+##Nov
+#fitting the distribution 
+#Best fit: NBII (AIC: 489.924  )
+fitDist(count_events,
+        data = above60oct_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_oct_41 <- gamlss(count_events~year, 
+                       family = NBII(), 
+                       data=above60oct_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.0644
+summary(mod_above60_oct_41)
+
+
+##Nov
+#fitting the distribution 
+#Best fit: NBII (AIC: 576.386 )
+fitDist(count_events,
+        data = above60nov_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_nov_41 <- gamlss(count_events~year, 
+                       family = NBII(), 
+                       data=above60nov_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.0162
+summary(mod_above60_nov_41)
+
+
+
+##Dec
+#fitting the distribution 
+#Best fit: DPO (AIC: 556.655  )
+fitDist(count_events,
+        data = above60dec_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_dec_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60dec_formod_41, 
+                       control = gamlss.control())
+#p-value: 359
+summary(mod_above60_dec_41)
+
+
+
+##Jan
+#fitting the distribution 
+#Best fit: DPO (AIC: 603.473  )
+fitDist(count_events,
+        data = above60jan_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_jan_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60jan_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.685
+summary(mod_above60_jan_41)
+
+
+
+##Feb
+#fitting the distribution 
+#Best fit: DPO (AIC: 574.503  )
+fitDist(count_events,
+        data = above60feb_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_feb_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60feb_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.670
+summary(mod_above60_feb_41)
+
+
+
+##Mar
+#fitting the distribution 
+#Best fit: DPO (AIC: 602.686  )
+fitDist(count_events,
+        data = above60mar_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_mar_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60mar_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.773
+summary(mod_above60_mar_41)
+
+
+##Apr
+#fitting the distribution 
+#Best fit: DPO (AIC: .127  )
+fitDist(count_events,
+        data = above60apr_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_apr_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60apr_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.846
+summary(mod_above60_apr_41)
+
+
+
+
+##May
+#fitting the distribution 
+#Best fit: GEOM (AIC: 410.159  )
+fitDist(count_events,
+        data = above60may_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_may_41 <- gamlss(count_events~year, 
+                       family = GEOM(), 
+                       data=above60may_formod_41, 
+                       control = gamlss.control())
+#p-value: 0.669
+summary(mod_above60_may_41)
+
+
+
+
+
+##Jun
+#fitting the distribution 
+#Best fit: DPO (AIC: 245.968  )
+fitDist(count_events,
+        data = above60jun_formod_41, 
+        type = "counts", 
+        try.gamlss = T)
+#model
+mod_above60_jun_41 <- gamlss(count_events~year, 
+                       family = DPO(), 
+                       data=above60jun_formod_41, 
+                       control = gamlss.control(n.cyc = 100))
+#p-value: 0.669
+summary(mod_above60_jun_41)
+
+###############################################################################
+#because of large number of zeros, not running stats on 100 mph threshold
+```
+
+###############################################################################
+# #1981-2021!
+#looking at events of note (freezing, fog, high winds) by month, with RH instead of present weather codes to determine fog, 1981-2021
+## Making datasets for each wind threshold, 1981-2021 
+```{r}
+#25 mph wind threshold
+wind_fog_25 <- merged_data %>% 
+ mutate(wind_fog = ifelse(wind_speed >= 25  & RH >= 96 & temperature < 32, "Y", "N"))
+
+
+
+#60 mph wind threshold
+wind_fog_60 <- merged_data %>% 
+  mutate(wind_fog = ifelse(wind_speed >= 60  & RH >= 96 & temperature < 32, "Y", "N"))
+
+
+
+
+#dataframe with Y in column if wind speeds (hourly average) are 100 or above, temp is below 32 (filtering out =32 to avoid edge cases where the hour may be hovering around/above freezing) and RH is 96% or above (based on RH error in Seidel for fog). returns N if criteria not met
+wind_fog_100 <- merged_data %>% 
+  mutate(wind_fog = ifelse(wind_speed >= 100  & RH >= 96 & temperature < 32, "Y", "N"))
+
+
+
+```
+
+
+```{r}
+
+
+#events: 25 mph threshold
+count_total_25 <- wind_fog_25 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  filter(year > 1980) %>% #weather station change
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_25 <- count_total_25 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+counts_25 <- merge(count_total_25, count_total_events_25, by = 'monyear')
+
+counts_final25 <- counts_25 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+
+
+#events: 60 mph threshold
+count_total_60 <- wind_fog_60 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  filter(year > 1980) %>% #weather station change
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_60 <- count_total_60 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+counts_60 <- merge(count_total_60, count_total_events_60, by = 'monyear')
+
+counts_final60 <- counts_60 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+
+
+
+#100 mph: getting a column with number of events (or 0)
+#counting the number of events where criteria are met (wind_fog column Y's) and not met (wind_fog N's) for each month and year (ex. Jan 1981 = 1-1981 in monyear column)
+count_total_100 <- wind_fog_100 %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  filter(year > 1980) %>% #weather station change
+  mutate(monyear = str_c(month, "-", year)) %>%
+  count(monyear, wind_fog) %>% 
+  rename(total = n)
+  
+count_total_events_100 <- count_total_100 %>%
+  count(monyear) %>%
+  rename(num_years = n)
+
+
+# count_event <- wind_fog_100 %>% 
+#   mutate(month = month(date), year = year(date)) %>% 
+#   filter(year > 1980) %>% #weather station change
+#   count(year, month, wind_fog) %>% 
+#   mutate(events = n) %>% 
+#   mutate(monyear = str_c(month, "-", year))
+
+counts_100 <- merge(count_total, count_total_events, by = 'monyear')# %>% 
+  #select(monyear, wind_fog, events, total) %>% 
+  #mutate(event_count = ifelse(length(monyear) == 2, events, 0))
+counts_final100 <- counts_100 %>%
+  mutate(count_events = ifelse(num_years == 2, total, 0)) %>%
+  filter((wind_fog == "Y" & num_years ==2) | (wind_fog == "N" & num_years ==1)) %>%
+    separate(monyear, c("month", "year"), sep='-')%>%
+  mutate(year = as.numeric(year))
+  
+
+
+
+# # THIS IS NOT FINISHED: trying to make a proportion of extreme events in the year
+# sums <- aggregate(n ~ , counts, FUN = sum)
+#   mutate(prop = n(month(date), year(date))/n(month(date), year(date), wind_fog, Y))
+# 
+# count_fogs <- fog_comparison %>%
+#   count(match, monyear) %>%
+#   filter(match == "y_match")
+# fog_sums <- aggregate(n ~ monyear, count_fogs, FUN = sum)
+# fog_proportions <- merge(fog_sums, count_fogs, by = "monyear") %>%
+#   rename(y_match = n.y, 
+#          total = n.x) %>%
+#   separate(monyear, c("month", "year"), sep='-') %>%
+#   mutate(proportion = y_match/total) %>%
+#   mutate(year=as.numeric(year))
+
+```
+
+Making dataframes for each month, overall and for models
+```{r}
+#25 mph threshold
+#first, each month separately, and then each month with just count and year columns for models
+#nov
+above25_nov <- counts_final25 %>%
+  filter(month == 11)
+above25nov_formod <- above25_nov %>%
+  dplyr::select(count_events, year)
+
+#dec
+above25_dec <- counts_final25 %>%
+  filter(month == 12)
+above25dec_formod <- above25_dec %>%
+  dplyr::select(count_events, year)
+
+#jan
+above25_jan <- counts_final25 %>%
+  filter(month == 1)
+above25jan_formod <- above25_jan %>%
+  dplyr::select(count_events, year)
+
+#feb
+above25_feb <- counts_final25 %>%
+  filter(month == 2)
+above25feb_formod <- above25_feb %>%
+  dplyr::select(count_events, year)
+
+#mar
+above25_mar <- counts_final25 %>%
+  filter(month == 3)
+above25mar_formod <- above25_mar %>%
+  dplyr::select(count_events, year)
+
+#apr
+above25_apr <- counts_final25 %>%
+  filter(month == 4)
+above25apr_formod <- above25_apr %>%
+  dplyr::select(count_events, year)
+
+#may
+above25_may <- counts_final25 %>%
+  filter(month == 5)
+above25may_formod <- above25_may %>%
+  dplyr::select(count_events, year)
+
+#jun
+above25_jun <- counts_final25 %>%
+  filter(month == 6)
+above25jun_formod <- above25_jun %>%
+  dplyr::select(count_events, year)
+
+
+
+#above 60 mph wind threshold
+#first, each month separately, and then each month with just count and year columns for models
+#nov
+above60_nov <- counts_final60 %>%
+  filter(month == 11)
+above60nov_formod <- above60_nov %>%
+  dplyr::select(count_events, year)
+
+#dec
+above60_dec <- counts_final60 %>%
+  filter(month == 12)
+above60dec_formod <- above60_dec %>%
+  dplyr::select(count_events, year)
+
+#jan
+above60_jan <- counts_final60 %>%
+  filter(month == 1)
+above60jan_formod <- above60_jan %>%
+  dplyr::select(count_events, year)
+
+#feb
+above60_feb <- counts_final60 %>%
+  filter(month == 2)
+above60feb_formod <- above60_feb %>%
+  dplyr::select(count_events, year)
+
+#mar
+above60_mar <- counts_final60 %>%
+  filter(month == 3)
+above60mar_formod <- above60_mar %>%
+  dplyr::select(count_events, year)
+
+#apr
+above60_apr <- counts_final60 %>%
+  filter(month == 4)
+above60apr_formod <- above60_apr %>%
+  dplyr::select(count_events, year)
+
+#may
+above60_may <- counts_final60 %>%
+  filter(month == 5)
+above60may_formod <- above60_may %>%
+  dplyr::select(count_events, year)
+
+#jun
+above60_jun <- counts_final60 %>%
+  filter(month == 6)
+above60jun_formod <- above60_jun %>%
+  dplyr::select(count_events, year)
+
+#above 100 mph wind threshold 
+#first, each month separately, and then each month with just count and year columns for models
+#nov
+above100_nov <- counts_final100 %>%
+  filter(month == 11)
+above100nov_formod <- above100_nov %>%
+  dplyr::select(count_events, year)
+
+#dec
+above100_dec <- counts_final100 %>%
+  filter(month == 12)
+above100dec_formod <- above100_dec %>%
+  dplyr::select(count_events, year)
+
+#jan
+above100_jan <- counts_final100 %>%
+  filter(month == 1)
+above100jan_formod <- above100_jan %>%
+  dplyr::select(count_events, year)
+
+#feb
+above100_feb <- counts_final100 %>%
+  filter(month == 2)
+above100feb_formod <- above100_feb %>%
+  dplyr::select(count_events, year)
+
+#mar
+above100_mar <- counts_final100 %>%
+  filter(month == 3)
+above100mar_formod <- above100_mar %>%
+  dplyr::select(count_events, year)
+
+#apr
+above100_apr <- counts_final100 %>%
+  filter(month == 4)
+above100apr_formod <- above100_apr %>%
+  dplyr::select(count_events, year)
+
+#may
+above100_may <- counts_final100 %>%
+  filter(month == 5)
+above100may_formod <- above100_may %>%
+  dplyr::select(count_events, year)
+
+#jun
+above100_jun <- counts_final100 %>%
+  filter(month == 6)
+above100jun_formod <- above100_jun %>%
+  dplyr::select(count_events, year)
+```
+
+
+#plots of events by month
+```{r}
+#25 mph threshold
+#nov
+above25_nov_plot <- above25_nov %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above25_dec_plot <- above25_dec %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above25_jan_plot <- above25_jan %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above25_feb_plot <- above25_feb %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above25_mar_plot <- above25_mar %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above25_apr_plot <- above25_apr %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above25_may_plot <- above25_may %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June
+above25_jun_plot <- above25_jun %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 25 mph
+allmonths_25<- (above25_nov_plot | above25_dec_plot | above25_jan_plot | above25_feb_plot)/ (above25_mar_plot | above25_apr_plot | above25_may_plot | above25_jun_plot) 
+allmonths_25  + plot_annotation(title='Fog, Freezing, and above 25 mph wind hours 1981-2021')
+
+
+
+
+
+
+
+#60mph wind threshold
+#nov
+above60_nov_plot <- above60_nov %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above60_dec_plot <- above60_dec %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above60_jan_plot <- above60_jan %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above60_feb_plot <- above60_feb %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above60_mar_plot <- above60_mar %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above60_apr_plot <- above60_apr %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above60_may_plot <- above60_may %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June 
+above60_jun_plot <- above60_jun %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 60 mph
+allmonths_60<- (above60_nov_plot | above60_dec_plot | above60_jan_plot | above60_feb_plot)/ (above60_mar_plot | above60_apr_plot | above60_may_plot | above60_jun_plot) 
+allmonths_60  + plot_annotation(title='Fog, Freezing, and above 60 mph wind hours 1981-2021')
+
+
+
+
+
+#100mph wind threshold 
+#nov
+above100_nov_plot <- above100_nov %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("November")
+
+
+#dec
+above100_dec_plot <- above100_dec %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("December")
+
+
+#jan
+above100_jan_plot <- above100_jan %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("January")
+
+
+#feb
+above100_feb_plot <- above100_feb %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("February")
+
+
+#mar
+above100_mar_plot <- above100_mar %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("March")
+
+
+#apr
+above100_apr_plot <- above100_apr %>%
+  ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("April")
+
+#may
+above100_may_plot <- above100_may %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("May")
+
+#June
+above100_jun_plot <- above100_jun %>% 
+   ggplot(aes(x=year, y=count_events)) +
+  geom_point() +
+  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+ labs(x="Year", y="Number of Events") +
+  theme(axis.text.x = element_text(angle = 60)) +
+  ggtitle("June")
+
+#all together 100 mph
+allmonths_100<- (above100_nov_plot | above100_dec_plot | above100_jan_plot | above100_feb_plot)/ (above100_mar_plot | above100_apr_plot | above100_may_plot | above100_jun_plot) 
+allmonths_100  + plot_annotation(title='Fog, Freezing, and above 100 mph wind hours 1981-2021')
+
+
+
+
+
+```
 
