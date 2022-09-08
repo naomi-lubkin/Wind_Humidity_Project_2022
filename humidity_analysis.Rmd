@@ -14,13 +14,13 @@ library(trend)
 library(patchwork)
 
 knitr::opts_chunk$set(echo = TRUE)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+# setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 ```
 
 # Load in Data
 ```{r, show_col_types = FALSE}
-synoptic <- read_csv("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16 synoptic data 1935-2021.csv")
-pres_weather <- read_csv("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16 hourly present weather split by code 1935-2021 (1).csv")
+synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
+pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 ```
 # Clean data
 ```{r}
@@ -32,7 +32,7 @@ synoptic <- synoptic %>%
          precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
-  filter() # UPDATE: no 20 degress increases between readings
+  filter() # NEED TO UPDATE: no 20 degree increases between readings
 
   
 ```
@@ -137,74 +137,115 @@ rh <- rh %>%
   filter(RH >= 0)
 ```
 
-# NOT DOING SEASONAL, CAN IGNORE SEASONAL CODE
+
 # separate by seasons
 ```{r}
 # seasons by month: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
-synoptic_rh_liquid <- synoptic_rh_liquid %>% 
-  mutate(season = ifelse(between(month, 1, 2), "winter",
-                         ifelse(month == 12, "winter", 
-                                ifelse(between(month, 3, 5), "spring",
-                                       ifelse(between(month, 6, 8), "summer",
-                                              ifelse(between(month, 9, 11), "fall", NA))))))
+season_rh <- rh %>% 
+  mutate(year = year(date), 
+         month = month(date), 
+         year = as.numeric(year), 
+         month = as.numeric(month),
+         year_for_winter = ifelse(month == 12, year + 1, year), # this is to correct for month 12 being in previous year, so that winter can be grouped together in season_summary (below) 
+         season = case_when(
+           month == 12 ~ "Winter",
+           month == 1 ~ "Winter",
+           month == 2 ~ "Winter",
+           month == 3 ~ "Spring",
+           month == 4 ~ "Spring",
+           month == 5 ~ "Spring",
+           month == 6 ~ "Summer",
+           month == 7 ~ "Summer",
+           month == 8 ~ "Summer",
+           month == 9 ~ "Fall",
+           month == 10 ~ "Fall",
+           month == 11 ~ "Fall",
+           TRUE ~ NA_character_))
 
-season_rh <- synoptic_rh_liquid %>% 
-  group_by(season, year) %>% 
-  summarize(average_RH = mean(RH))
+
+season_summary <- season_rh %>% 
+  group_by(season, year_for_winter) %>% 
+  summarize(average_RH = mean(RH)) # this messes up winter data because it is taking month 1, 2, and 12 in one year. 12 should be in previous year. How to fix this?
+
 ```
 
 # Seasonal comparisons
 ```{r}
 ## Visual
-season_rh %>% 
-  ggplot(aes(year, average_RH, color = season)) +
+season_summary %>% 
+  ggplot(aes(year_for_winter, average_RH, color = season)) +
   geom_point() +
-  geom_smooth(method = lm) +
+  geom_smooth(method = lm, se = FALSE) +
   facet_wrap(~season)
 
 
 ## Linear regression of seasonal data for all season 1935 - 2021, using seasonal averages
 
 # fall
-fall_rh <- season_rh %>% 
-  filter(season == "fall") # isolate fall data
+fall_rh <- season_summary %>% 
+  filter(season == "Fall") # isolate fall data
 
-fall.lm = lm(average_RH ~ year, data = fall_rh)
+fall.lm = lm(average_RH ~ year_for_winter, data = fall_rh)
 summary(fall.lm)
-# p-value  = 0.127
-# adjusted r-squared = 0.01574
+# p-value  = 0.7422
+# adjusted r-squared = -0.01047
 
 
 # spring
-spring_rh <- season_rh %>% 
-  filter(season == "spring") # isolate spring data
+spring_rh <- season_summary %>% 
+  filter(season == "Spring") # isolate spring data
 
-spring.lm = lm(average_RH ~ year, data = spring_rh)
+spring.lm = lm(average_RH ~ year_for_winter, data = spring_rh)
 summary(spring.lm)
-# p-value  = 0.1129
-# adjusted r-squared = 0.01789
+# p-value  = 0.02176**
+# adjusted r-squared = 0.04935
 
 # summer
-summer_rh <- season_rh %>% 
-  filter(season == "summer") # isolate summer data
+summer_rh <- season_summary %>% 
+  filter(season == "Summer") # isolate summer data
 
-summer.lm = lm(average_RH ~ year, data = summer_rh)
+summer.lm = lm(average_RH ~ year_for_winter, data = summer_rh)
 summary(summer.lm)
-# p-value  = 0.02197
-# adjusted r-squared = 0.04916
+# p-value  = 0.9739
+# adjusted r-squared = -0.01175
 
 # winter
-winter_rh <- season_rh %>% 
-  filter(season == "winter") # isolate winter data
+winter_rh <- season_summary %>% 
+  filter(season == "Winter") # isolate winter data
 
-winter.lm = lm(average_RH ~ year, data = winter_rh)
+winter.lm = lm(average_RH ~ year_for_winter, data = winter_rh)
 summary(winter.lm)
-# p-value  = 0.3717
-# adjusted r-squared = -0.002254 
+# p-value  = 0.6936
+# adjusted r-squared = -0.009793
+
+
+
+## Sen Slopes for seasons
+
+# Fall
+fall.sen <- sens.slope(fall_rh$average_RH, conf.level = 0.95)
+#View(fall.sen)
+fall.sen[["p.value"]] # 0.8373378
+
+# Winter
+winter.sen <- sens.slope(winter_rh$average_RH, conf.level = 0.95)
+#View(winter.sen)
+winter.sen[["p.value"]] # 0.7429325
+
+# Spring
+spring.sen <- sens.slope(spring_rh$average_RH, conf.level = 0.95)
+#View(spring.sen)
+spring.sen[["p.value"]] # 0.01375496**
+
+# Summer
+summer.sen <- sens.slope(summer_rh$average_RH, conf.level = 0.95)
+#View(summer.sen)
+summer.sen[["p.value"]] # 0.8776295
+
 
 ```
 
-
+Spring is showing significant trends, but with very small slope
 
 # Monthly comparisons, focusing on November 
 ```{r}
@@ -224,7 +265,7 @@ ggplot(month_rh, aes(as.factor(month), average_RH)) +
   geom_boxplot() + 
   theme_bw() +
   labs(x = "Month", y = "Relative Humidity (%)") +
-  ggtitle("Average Relative HUmidity by Month 1935-2022")
+  ggtitle("Average Relative Humidity by Month 1935-2022")
 
 # November sen slopes
 nov_rh <- month_rh %>% 
@@ -278,10 +319,6 @@ rh %>%
   filter(month(date) == 6 | month(date) == 7 | month(date) == 8) %>% # for JJA
   summarize(avg = mean(RH))
 
-
-ggplot(synoptic_rh_liquid %>%  filter(year(date) <= 1940), aes(date, RH)) + geom_point()
-
-ggplot(month_rh, aes(year, average_RH, col = as.factor(month))) + geom_point()
 ```
 
 ```{r}
