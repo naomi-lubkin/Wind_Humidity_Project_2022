@@ -180,6 +180,8 @@ may_plot <- may_avgs %>%
 
 ```
 
+
+
 #Plots with no outliers (outliers excluded)
 ```{r}
 #November 
