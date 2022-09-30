@@ -138,7 +138,7 @@ rh <- rh %>%
 ```
 
 
-# separate by seasons
+# Separate by seasons
 ```{r}
 # seasons by month: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
 season_rh <- rh %>% 
@@ -165,20 +165,12 @@ season_rh <- rh %>%
 
 season_summary <- season_rh %>% 
   group_by(season, year_for_winter) %>% 
-  summarize(average_RH = mean(RH)) # this messes up winter data because it is taking month 1, 2, and 12 in one year. 12 should be in previous year. How to fix this?
+  summarize(average_RH = mean(RH)) 
 
 ```
 
 # Seasonal comparisons
 ```{r}
-## Visual
-season_summary %>% 
-  ggplot(aes(year_for_winter, average_RH, color = season)) +
-  geom_point() +
-  geom_smooth(method = lm, se = FALSE) +
-  facet_wrap(~season)
-
-
 ## Linear regression of seasonal data for all season 1935 - 2021, using seasonal averages
 
 # fall
@@ -243,6 +235,31 @@ summer.sen <- sens.slope(summer_rh$average_RH, conf.level = 0.95)
 summer.sen[["p.value"]] # 0.8776295
 
 
+## VISUALS
+
+# all seasons on one graph
+season_summary %>% 
+  ggplot(aes(year_for_winter, average_RH, color = season)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  facet_wrap(~season) +
+  labs(title = "Average Relative Humidities by Season", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)", caption = "Note: Winter graph groups winter months consecutively (e.g. December of 1996, January of 1997, and February of 1997)") 
+
+# spring
+spring_rh %>% 
+  ggplot(aes(year_for_winter, average_RH)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE, color = "grey") +
+  theme_minimal() +
+  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)") 
+
+# winter
+winter_rh %>% 
+  ggplot(aes(year_for_winter, average_RH)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE, color = "grey") +
+  theme_minimal() +
+  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)") 
 ```
 
 Spring is showing significant trends, but with very small slope
@@ -621,7 +638,7 @@ dec.sen[["p.value"]] # 0.9473864
 jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec
 ```
 
-# overall RH over years (not split by month)
+# Overall RH over years (not split by month)
 ```{r}
 year_rh <- rh %>% 
   group_by(year) %>% 
@@ -641,6 +658,87 @@ View(year.sen)
 year.sen[["p.value"]]
 ```
 
+
+
+
+
+# In the clear vs. in the clouds
+```{r}
+# adding fog and clear class
+season_rh <- season_rh %>% 
+  mutate(Class = ifelse(dry_bulb == wet_bulb, "Fog", "Clear")) %>% 
+  dplyr::select(date, RH, year, month, year_for_winter, season, Class)
+
+# filter for clear 
+clear <- season_rh %>% 
+  filter(Class == "Clear") 
+
+# average RH each year
+clear_summary <- clear %>% 
+  group_by(year) %>% 
+  summarize(avg_rh = mean(RH))
+
+# visual: dotplot
+clear_summary %>% 
+  ggplot(aes(x = year, y = avg_rh)) + 
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  theme_minimal() +
+  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2021", x = "Year", y = "Average Relative Humidity (%)")
+
+# analysis (Sen's Slope)
+clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
+View(clear.sen)
+clear.sen[["p.value"]]
+```
+# Fog frequency
+```{r}
+# Fog frequency by season: all days 1935-2021
+ff_seasonal <- season_rh %>% 
+  group_by(season, Class) %>% 
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season) %>% 
+  summarise(n_season = sum(n_class), n_class = n_class, Class = Class) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, Class = Class)
+
+# overall fog frequency
+ff_overall <- season_rh %>% 
+  group_by(Class) %>% 
+  summarise(n_class = n()) %>% 
+  mutate(n_total = sum(n_class)) %>% 
+  summarise(ff = n_class/n_total, Class = Class)
+
+# visual: seasonal          SHOULD I INCORPORATE OVERALL HERE?
+ggplot(ff_seasonal, aes(x = season, y = ff, fill = Class)) + 
+  geom_col() +
+  scale_fill_manual(values =c("skyblue", "darkgrey")) +
+  theme_minimal() +
+  labs(title = "Frequency of days spent in the clear and in the fog", subtitle = "1935-2021", x = "Season", y = "")
+  
+```
+
+
+# Decadal trend table
+```{r}
+# 1935-1945
+
+# 1946-1955
+
+# 1956-1965
+
+# 1966-1975
+
+# 1976-1985
+
+# 1986-1995
+
+# 1996-2005
+
+# 2006-2015
+
+# 2016-2025
+
+```
 
 
 
