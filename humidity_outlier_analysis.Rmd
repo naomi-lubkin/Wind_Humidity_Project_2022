@@ -1,0 +1,446 @@
+---
+title: "humidity_outlier_analysis"
+author: "Larz von Huene"
+output: html_document
+date: '2022-08-23'
+---
+
+Identification and removal of outliers from humidity data, 1935-2021.  
+
+#Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+# setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(dplyr)
+library(stats)
+library(patchwork)
+library(lubridate)
+library(ggstatsplot)
+library(trend)
+```
+
+#Loading in data
+```{r}
+# humidity data (prob will need to to get calculated again)
+synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
+pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
+```
+
+# Clean data
+```{r}
+synoptic <- synoptic %>% 
+  filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
+  mutate(dry_bulb = as.numeric(dry_bulb), 
+         wet_bulb = as.numeric(wet_bulb), 
+         pressure_mb = as.numeric(pressure_mb), 
+         precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
+  filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
+  filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
+  filter() # NEED TO UPDATE: no 20 degree increases between readings
+```
+
+# Calculate Relative Humidity 
+```{r}
+
+# Calculations from WMO annex 4.B
+
+# split data into ice and water (based on Seidel's distinction)
+synoptic_rh_liquid <- synoptic %>% 
+  filter(wet_bulb >= 32) 
+synoptic_rh_ice <- synoptic %>% 
+  filter(wet_bulb < 32)
+
+## calculations for water
+# saturation vapor pressure
+f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074*(synoptic_rh_liquid$pressure_mb)^-1
+
+sat_vap_p_water_pure <- 6.112^(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb))) # saturation vapor pressure for pure water
+sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
+  
+# psychometric formulas for the Assmann psychrometer
+water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
+
+# Relative humidity
+rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
+
+
+
+# liquid tibble
+synoptic_rh_liquid <- synoptic_rh_liquid %>% 
+  mutate(RH = rh_liquid) 
+synoptic_rh_liquid
+
+# count how many negative values in "synoptic_RH_liquid"
+nrow(synoptic_rh_liquid[synoptic_rh_liquid$RH<0,])
+  # 0 negative out of 52,560 rows
+
+
+
+
+
+
+
+
+
+## calculations for ice
+
+synoptic_rh_ice <- synoptic %>% 
+  filter(wet_bulb < 32)
+
+f_p_ice <- 1.0016+(3.15*(10^-6))*(synoptic_rh_ice$pressure_mb)-0.074/synoptic_rh_ice$pressure_mb
+
+sat_vap_p_ice_pure_t <- 6.112*(exp(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb))))
+sat_vap_p_ice_moist_t <- sat_vap_p_ice_pure_t*f_p_ice
+
+sat_vap_p_ice_pure_tw <- 6.112*(exp(22.46*(synoptic_rh_ice$wet_bulb)/(272.62+(synoptic_rh_ice$wet_bulb))))
+sat_vap_p_ice_moist_tw <- sat_vap_p_ice_pure_tw*f_p_ice
+
+ice_vap_p <- sat_vap_p_ice_pure_t - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+frost_pt <- (272.62*(log(ice_vap_p/6.112*f_p_ice)))/(22.46-(log(ice_vap_p/6.112*f_p_ice)))
+
+sat_vap_p_from_frost <- 6.112*(exp(22.46*(frost_pt)/(272.62+(frost_pt))))
+vap_p_from_frost <- sat_vap_p_from_frost - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
+
+rh_ice <- 100*(vap_p_from_frost/sat_vap_p_from_frost)
+
+# ice tibble
+synoptic_rh_ice <- synoptic_rh_ice %>% 
+  mutate(RH = rh_ice) 
+synoptic_rh_ice
+
+
+
+# count how many negative values in "synoptic_RH_ice"
+nrow(synoptic_rh_ice[synoptic_rh_ice$RH<0,])
+  # 73 negative out of 70,874 rows
+
+# percent with negative RH in "synoptic_RH_ice"
+73/70874 # 0.1%
+```
+
+
+
+# Join together liquid and ice
+```{r}
+rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
+
+# count how many negative values in "synoptic_RH_ice"
+nrow(rh[rh$RH<0,])
+  # 73 negative out of 70,874 rows
+
+# percent with negative RH in "synoptic_RH_ice"
+73/70874 # 0.1%
+
+# filter out negative rh
+rh <- rh %>% 
+  filter(RH >= 0)
+```
+
+
+# Making datasets 
+```{r}
+# monthly RH dataset
+monthly_rh <- rh %>% 
+  mutate(month = month(date), year = year(date)) %>% 
+  group_by(year, month) %>% 
+  summarize(avg_rh = mean(RH)) %>% 
+  filter(year >= 1941) # to match wind data (maybe should do since 1981 to match outlier analysis of wind?)
+
+#filtering monthly averages by month 1941-2021
+#Nov 
+nov_avgs <- monthly_rh %>%
+  filter(month == 11) 
+
+#Dec
+dec_avgs <- monthly_rh %>%
+  filter(month ==12) 
+
+#Jan
+jan_avgs <- monthly_rh %>%
+  filter(month ==1) 
+#Feb
+feb_avgs <- monthly_rh %>%
+  filter(month ==2) 
+
+#Mar
+mar_avgs <- monthly_rh %>%
+  filter(month ==3)
+  
+#Apr
+apr_avgs <- monthly_rh %>%
+  filter(month ==4) 
+
+#May
+may_avgs <- monthly_rh %>%
+  filter(month ==5)
+
+#Jun
+jun_avgs <- monthly_rh %>%
+  filter(month ==6) 
+
+```
+
+# check for normal distribution
+```{r}
+# not a normal distribution
+ggplot(monthly_rh, aes(x = avg_rh)) + geom_histogram()
+
+
+
+# check by month?
+ggplot(nov_avgs, aes(x = avg_rh)) + geom_histogram() +
+  stat_function(fun = dnorm, args = list(mean=mean(nov_avgs$avg_rh), sd=sd(nov_avgs$avg_rh)))
+ggplot(dec_avgs, aes(x = avg_rh)) + geom_histogram() 
+ggplot(jan_avgs, aes(x = avg_rh)) + geom_histogram()
+ggplot(feb_avgs, aes(x = avg_rh)) + geom_histogram()
+ggplot(mar_avgs, aes(x = avg_rh)) + geom_histogram()
+ggplot(apr_avgs, aes(x = avg_rh)) + geom_histogram()
+```
+
+
+
+#Outlier calculations 1941-2021
+```{r}
+#boxplot to identify outliers (outside the 1.5 IQR range = outlier)
+boxplot(avg_rh ~ month, data = monthly_rh, 
+        xlab = "Month", 
+        ylab = "Average Relative Humidity (%)", 
+        main = "Monthly Average Relative Humidity 1941-2021")
+
+# HOW TO REMOVE OUTLIERS: May not make sense to do the same analysis that was done to wind, maybe should just remove the outliers that are obvious visually (they may be due to stratospheric intrusions or whatever that is called)
+# below is the method used in the wind analysis
+
+
+#manual removal of outliers: identified them above, then noted the row of each outlier and manually took each row out using which() function
+outliers <- boxplot(avg_rh ~ month, data = monthly_rh, plot = FALSE)$out
+
+no_outliers <- monthly_rh[-which(monthly_rh$avg_rh %in% outliers),]
+
+
+#boxplot of rh by month with outliers removed -- STILL THERE ARE OUTLIERS? WHY?
+boxplot(avg_rh ~ month, data = no_outliers,
+        xlab = "Month",
+        ylab = "Average Relative Humidity (%)",
+        main = "Monthly Average Relative Humidity 1941-2021 (outliers excluded)")
+
+
+
+#making monthly dataframes with the outliers excluded
+#only including months of interest (winter/spring) and months that have outliers
+#nov
+nov_avgs_noout <- no_outliers %>%
+  filter(month == 11)
+
+#dec
+dec_avgs_noout <- no_outliers %>%
+  filter(month == 12)
+
+#jan
+jan_avgs_noout <- no_outliers %>%
+  filter(month == 1)
+
+
+#apr
+apr_avgs_noout <- no_outliers %>%
+  filter(month == 4)
+
+#may
+may_avgs_noout <- no_outliers %>%
+  filter(month == 5)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+# Below this is not up to date
+
+
+
+
+
+
+
+
+
+#Plots with outliers
+```{r}
+#Nov
+#plot of Nov averages 1981-2021, outliers included
+nov_plot <- nov_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+
+#Dec
+#plot of Dec averages 1981-2021, outliers included
+dec_plot <- dec_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Jan
+#plot of Jan averages 1981-2021, outliers inlcluded
+jan_plot <- jan_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+
+#Apr
+apr_plot <- apr_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+ ggtitle("April") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#May
+may_plot <- may_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+```
+
+
+
+#Plots with no outliers (outliers excluded)
+```{r}
+#November 
+nov_noout_plot <- nov_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Dec
+dec_noout_plot <- dec_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Jan
+jan_noout_plot <- jan_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Apr
+apr_noout_plot <- apr_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("April - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#May
+may_noout_plot <- may_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+```
+
+#Comparison plots (outliers vs no outliers by month)
+```{r}
+#Nov
+nov_comp <- nov_plot + nov_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Dec
+dec_comp <- dec_plot + dec_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Jan
+jan_comp <- dec_plot + jan_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Apr
+apr_comp <- apr_plot + apr_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#May
+may_comp <- may_plot + may_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+
+#comparing all to all 
+normal_plot <- nov_plot + dec_plot + apr_plot + may_plot + plot_annotation( title = "Monthly Wind Averages 1981-2021")
+
+no_out_plot <- nov_noout_plot + dec_noout_plot + jan_noout_plot + apr_noout_plot + may_noout_plot + plot_annotation("Monthly Wind Averages 1981-2021 - Outliers Excluded")
+
+```
+
+#Sen slopes/p-values no outliers
+```{r}
+#nov
+novnoout.sen <- sens.slope(nov_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(novnoout.sen)
+
+#dec
+decnoout.sen <- sens.slope(dec_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(decnoout.sen)
+
+#jan
+jannoout.sen <- sens.slope(jan_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(jannoout.sen)
+
+
+#apr
+aprnoout.sen <- sens.slope(apr_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(aprnoout.sen)
+
+#may
+maynoout.sen <- sens.slope(may_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(maynoout.sen)
+```
