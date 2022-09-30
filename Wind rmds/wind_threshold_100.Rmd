@@ -11,7 +11,7 @@ There are separate rmd files for other wind thresholds.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+#setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 library(here)
 here::here()
 library(dplyr)
@@ -24,14 +24,14 @@ library(gridExtra)
 #Loading in the required data
 ```{r, echo=FALSE}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
-pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021.csv"))
 
 #b16 hourly daily wind speed, jan 1935-dec2021
 hourly_wind <- read_csv(here("Data", "b16-hourly wind 1935-2021.csv"))
 hourly_wind <- hourly_wind %>% 
   mutate(wind_speed = as.numeric(wind_speed))
 
-hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
+hourly_temp <- read_csv(here("Data", "b16-hourly temperature 1935-2021.csv"))
 hourly_temp <- hourly_temp %>% 
   mutate(temperature = as.numeric(temperature))
 ```
@@ -102,7 +102,6 @@ coldFog<-xtrm_cond %>%
 
 #THRESHOLD: above 100 mph (1981-2021)
 Setting up dataframe
-
 ```{r}
 #making a column that returns Y if wind speeds are above 100, temps are below 32, and fog is present
 above100 <- coldFog %>% 
@@ -412,3 +411,53 @@ summary(mod_above100_apr)
 
 #not doing stats for may, june because they have only one event each
 ```
+
+
+
+
+
+# Just Winter counts (Dec, Jan, Feb): 100 mph threshold
+```{r}
+# seasons by month: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
+season_above100 <- above100 %>% 
+  mutate(month = as.numeric(month),
+         year_for_winter = ifelse(month == 12, year + 1, year), # this is to correct for month 12 being in previous year, so that winter can be grouped together in season_summary (below) 
+         season = case_when(
+           month == 12 ~ "Winter",
+           month == 1 ~ "Winter",
+           month == 2 ~ "Winter",
+           month == 3 ~ "Spring",
+           month == 4 ~ "Spring",
+           month == 5 ~ "Spring",
+           month == 6 ~ "Summer",
+           month == 7 ~ "Summer",
+           month == 8 ~ "Summer",
+           month == 9 ~ "Fall",
+           month == 10 ~ "Fall",
+           month == 11 ~ "Fall",
+           TRUE ~ NA_character_))
+
+
+# add up events in winter
+winter_above100_summary <- season_above100 %>% 
+  group_by(season, year_for_winter) %>% 
+  summarize(event_count_total = sum(event_count)) %>% 
+  filter(season == "Winter")
+
+# visual
+ggplot(winter_above100_summary, aes(x = year_for_winter, y = event_count_total)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  theme_minimal() +
+  labs(title = "Winter Events Above 100 mph", subtitle = "1981 - 2021", x = "Year", y = "Number of Events") 
+
+# Sen's slope analysis
+winter100.sen <- sens.slope(winter_above100_summary$event_count_total, conf.level = 0.95)
+View(winter100.sen)
+winter100.sen[["p.value"]]
+```
+
+
+
+
+
