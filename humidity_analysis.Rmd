@@ -4,8 +4,11 @@ author: "Larz von Huene"
 date: '2022-06-06'
 output: html_document
 ---
-#Relative humidity calculations and analysis 
-# Packages and set working directory
+
+This rmd calculates relative humidity and analyzes its trends annually, seasonally, and monthly. The relative humidity is used to determine the presence of fog, and then fog frequency is calculated and analyzed.
+
+
+#Load Packages
 ```{r}
 library(tidyverse)
 #library(psychrolib)
@@ -15,7 +18,6 @@ library(patchwork)
 library(kableExtra)
 
 knitr::opts_chunk$set(echo = TRUE)
-# setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 ```
 
 # Load in Data
