@@ -17,8 +17,6 @@ library(lubridate)
 
 knitr::opts_chunk$set(echo = TRUE)
 
-#setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
-
 library(here)
 here::here()
 library(dplyr)
@@ -57,10 +55,8 @@ synoptic <- synoptic %>%
 ```
 
 # Calculate Relative Humidity 
+Calculations from WMO annex 4.B
 ```{r}
-
-# Calculations from WMO annex 4.B
-
 # split data into ice and water (based on Seidel's distinction)
 synoptic_rh_liquid <- synoptic %>% 
   filter(wet_bulb >= 32) 
@@ -80,19 +76,9 @@ water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_
 # Relative humidity
 rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
 
-
-
 # liquid tibble
 synoptic_rh_liquid <- synoptic_rh_liquid %>% 
   mutate(RH = rh_liquid) 
-synoptic_rh_liquid
-
-# count how many negative values in "synoptic_RH_liquid"
-nrow(synoptic_rh_liquid[synoptic_rh_liquid$RH<0,])
-  # 0 negative out of 52,560 rows
-
-
-
 
 
 
@@ -127,30 +113,21 @@ synoptic_rh_ice <- synoptic_rh_ice %>%
 synoptic_rh_ice
 
 
-
-# count how many negative values in "synoptic_RH_ice"
-nrow(synoptic_rh_ice[synoptic_rh_ice$RH<0,])
-  # 73 negative out of 70,874 rows
-
-# percent with negative RH in "synoptic_RH_ice"
-73/70874 # 0.1%
-```
-
-# Join together liquid and ice
-```{r}
+## Join ice and liquid into one tibble
 rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
 
-# count how many negative values in "synoptic_RH_ice"
+# count how many negative values in "rh"
 nrow(rh[rh$RH<0,])
   # 73 negative out of 70,874 rows
 
-# percent with negative RH in "synoptic_RH_ice"
+# percent with negative RH in "rh"
 73/70874 # 0.1%
 
 # filter out negative rh
 rh <- rh %>% 
   filter(RH >= 0)
 ```
+
 
 # fog data stuff
 ```{r}
@@ -244,6 +221,7 @@ ggplot(merged_data, aes(date, temperature)) +
   geom_line() +
   geom_line(aes(x = date, y = dry_bulb), col = "red", alpha = 0.5)
 ```
+
 #COMPARISON: fog w/ pres weather codes (F and no GF) vs. fog w/ RH (rh>=96%)
 ```{r}
 #analyzing what % of time pres weather codes and RH match
