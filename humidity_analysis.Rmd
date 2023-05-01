@@ -5,7 +5,7 @@ date: '2022-06-06'
 output: html_document
 ---
 
-This rmd calculates relative humidity and analyzes its trends annually, seasonally, and monthly. The relative humidity is used to determine the presence of fog, and then fog frequency is calculated and analyzed.
+This rmd calculates relative humidity using WMO annex 4.B and analyzes its trends annually, seasonally, and monthly. The relative humidity is used to determine the presence of fog, and then fog frequency is calculated and analyzed.
 
 
 #Load Packages
@@ -25,6 +25,8 @@ knitr::opts_chunk$set(echo = TRUE)
 synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 ```
+
+
 # Clean data
 ```{r}
 synoptic <- synoptic %>% 
@@ -36,17 +38,13 @@ synoptic <- synoptic %>%
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
   filter() # NEED TO UPDATE: no 20 degree increases between readings
-
-  
 ```
 
 
 
 # Calculate Relative Humidity 
+Calculations from WMO annex 4.B
 ```{r}
-
-# Calculations from WMO annex 4.B
-
 # split data into ice and water (based on Seidel's distinction)
 synoptic_rh_liquid <- synoptic %>% 
   filter(wet_bulb >= 32) 
@@ -66,19 +64,9 @@ water_vap_p <- (6.112^(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_
 # Relative humidity
 rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
 
-
-
 # liquid tibble
 synoptic_rh_liquid <- synoptic_rh_liquid %>% 
   mutate(RH = rh_liquid) 
-synoptic_rh_liquid
-
-# count how many negative values in "synoptic_RH_liquid"
-nrow(synoptic_rh_liquid[synoptic_rh_liquid$RH<0,])
-  # 0 negative out of 52,560 rows
-
-
-
 
 
 
@@ -113,32 +101,21 @@ synoptic_rh_ice <- synoptic_rh_ice %>%
 synoptic_rh_ice
 
 
-
-# count how many negative values in "synoptic_RH_ice"
-nrow(synoptic_rh_ice[synoptic_rh_ice$RH<0,])
-  # 73 negative out of 70,874 rows
-
-# percent with negative RH in "synoptic_RH_ice"
-73/70874 # 0.1%
-```
-
-
-
-# Join together liquid and ice
-```{r}
+## Join ice and liquid into one tibble
 rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
 
-# count how many negative values in "synoptic_RH_ice"
+# count how many negative values in "rh"
 nrow(rh[rh$RH<0,])
   # 73 negative out of 70,874 rows
 
-# percent with negative RH in "synoptic_RH_ice"
+# percent with negative RH in "rh"
 73/70874 # 0.1%
 
 # filter out negative rh
 rh <- rh %>% 
   filter(RH >= 0)
 ```
+
 
 
 # Separate by seasons
@@ -171,6 +148,7 @@ season_summary <- season_rh %>%
   summarize(average_RH = mean(RH)) 
 
 ```
+
 
 # Seasonal comparisons
 ```{r}
