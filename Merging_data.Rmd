@@ -31,12 +31,53 @@ library(pscl) #for hurdle model
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 #b16 hourly daily wind speed, jan 1935-dec2021
-hourly_wind_raw <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
 
 hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv")
 
 synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
 
+```
+
+# Update to add 2022 data (doesn't include weather codes)
+```{r}
+## Wind: cleaning data
+
+#hourly wind data, 1941-2021
+hourly_wind_41on <- hourly_wind %>%
+  #separate(date, c("year", "month", "day", "hour")) %>% #separating dates and times
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date))  %>%
+   filter(year >= 1941) %>%
+    mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#hourly wind data, 2022
+hourly_wind_22 <- wind_2022 %>%
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date)) %>%
+  select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#merging : dataframe with 1941-2022 hourly wind averages
+hourly_wind_41_22 <- rbind(hourly_wind_41on, hourly_wind_22)
+
+
+## RH
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") # GET NEW ONE FROM JAY
+pressure <- read_csv("Data/2022_RH_pressure.csv")
+
+synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
+  select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
+  
+synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
 ```
 
 # Clean synoptic data
@@ -50,8 +91,6 @@ synoptic <- synoptic %>%
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
   filter() # UPDATE: no 20 degress increases between readings
-
-  
 ```
 
 # Calculate Relative Humidity 

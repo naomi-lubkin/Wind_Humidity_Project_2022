@@ -11,7 +11,6 @@ This rmd calculates relative humidity using WMO annex 4.B and analyzes its trend
 #Load Packages
 ```{r}
 library(tidyverse)
-#library(psychrolib)
 library(lubridate)
 library(trend)
 library(patchwork)
@@ -22,8 +21,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load in Data
 ```{r, show_col_types = FALSE}
-synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
+synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>% 
+  select(-c(precipitation, precipitation_trace))
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
+
+# Adding 2022 for synoptic
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") # GET NEW ONE FROM JAY
+pressure <- read_csv("Data/2022_RH_pressure.csv")
+
+synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
+  select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
+  
+synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
 ```
 
 
@@ -33,8 +42,7 @@ synoptic <- synoptic %>%
   filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
   mutate(dry_bulb = as.numeric(dry_bulb), 
          wet_bulb = as.numeric(wet_bulb), 
-         pressure_mb = as.numeric(pressure_mb), 
-         precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
+         pressure_mb = as.numeric(pressure_mb)) %>% # switch from chr to dbl
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
   filter() # NEED TO UPDATE: no 20 degree increases between readings
@@ -152,7 +160,7 @@ season_summary <- season_rh %>%
 
 # Seasonal comparisons
 ```{r}
-## Linear regression of seasonal data for all season 1935 - 2021, using seasonal averages
+## Linear regression of seasonal data for all season 1935 - 2022, using seasonal averages
 
 # fall
 fall_rh <- season_summary %>% 
@@ -224,7 +232,7 @@ season_summary %>%
   geom_point() +
   geom_smooth(method = lm, se = FALSE) +
   facet_wrap(~season) +
-  labs(title = "Average Relative Humidities by Season", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)", caption = "Note: Winter graph groups winter months consecutively (e.g. December of 1996, January of 1997, and February of 1997)") 
+  labs(title = "Average Relative Humidities by Season", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)", caption = "Note: Winter graph groups winter months consecutively (e.g. December of 1996, January of 1997, and February of 1997)") 
 
 # spring
 spring_rh %>% 
@@ -232,7 +240,7 @@ spring_rh %>%
   geom_point() +
   geom_smooth(method = lm, se = FALSE, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)") 
+  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") 
 
 # winter
 winter_rh %>% 
@@ -240,7 +248,7 @@ winter_rh %>%
   geom_point() +
   geom_smooth(method = lm, se = FALSE, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2021", x = "Year", y = "Relative Humidity (%)") 
+  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") 
 ```
 
 Spring is showing significant trends, but with very small slope
@@ -345,7 +353,7 @@ ggplot(month_rh, aes(as.factor(month_name), average_RH)) +
   theme_classic() +
   theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
   labs(x = "Month", y = "Relative Humidity (%)") +
-  ggtitle("Monthly Average Relative Humidities 1941-2021")
+  ggtitle("Monthly Average Relative Humidities 1941-2022")
 ```
 
 
@@ -630,9 +638,9 @@ ggplot(year_rh, aes(year, avg_rh)) +
   geom_point() +
   theme_minimal() +
   ylim(60, 100) +
-  xlim(1941, 2021) + # select only years after 1941 for continuity with wind data
+  xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
   labs(x = "Year", y = "Relative Humidity (%)") +
-  ggtitle("Average Relative Humidities 1941-2021")
+  ggtitle("Average Relative Humidities 1941-2022")
 
 year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
 #View(year.sen)
@@ -663,7 +671,7 @@ clear_summary %>%
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2021", x = "Year", y = "Average Relative Humidity (%)")
+  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2022", x = "Year", y = "Average Relative Humidity (%)")
 
 # analysis (Sen's Slope)
 clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
@@ -675,7 +683,7 @@ clear.sen[["conf.int"]]
 
 # Fog frequency
 ```{r}
-# Fog frequency by season: all days 1935-2021
+# Fog frequency by season: all days 1935-2022
 ff_seasonal <- season_rh %>% 
   group_by(season, Class) %>% 
   summarise(n_class = n()) %>% # get number of fog and clear days
@@ -697,7 +705,7 @@ ggplot(ff_seasonal, aes(x = season, y = ff, fill = Class)) +
   geom_col() +
   scale_fill_manual(values =c("skyblue", "darkgrey")) +
   theme_minimal() +
-  labs(title = "Frequency of days spent in the clear and in the fog", subtitle = "1935-2021", x = "Season", y = "")
+  labs(title = "Frequency of days spent in the clear and in the fog", subtitle = "1935-2022", x = "Season", y = "")
   
   
   
@@ -738,7 +746,7 @@ View(ff_sen)
 #            between(year, 1986, 1995)  ~ "6",
 #            between(year, 1996, 2005)  ~ "7",
 #            between(year, 2006, 2015)  ~ "8",
-#            between(year, 2016, 2021)  ~ "9", #this is not a full decade.... is this an issue?
+#            between(year, 2016, 2022)  ~ "9", #this is not a full decade.... is this an issue?
 #            TRUE ~ NA_character_))
 
 
@@ -801,14 +809,14 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
   distinct() %>%   # removes rows with repeat values
   
   as.data.frame(html_table()) 
-  # add mean RH? for 1941 and for 2021
+  # add mean RH? for 1941 and for 2022
 
 
 
 # Making the table, KableExtra package
 
 annual_trends_all %>%
-  kbl(caption = "Annual Trends of Relative Humidity from 1935-2021") %>%
+  kbl(caption = "Annual Trends of Relative Humidity from 1935-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>% 
   group_rows(group_label = "All", start_row = 1, end_row = 5, hline_after = T) %>% 
