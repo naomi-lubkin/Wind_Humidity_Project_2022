@@ -1,0 +1,30 @@
+---
+title: "Wind_load_analysis"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-05-01"
+output: html_document
+---
+
+This rmd calculates wind load and analyzes trends over the years.
+The drag coefficient was obtained from a study by Gilllies et al. (2002) that looked at three different plant species. For this analysis we used their drag coefficient of a Colorado Spruce.
+
+# Packages
+```{r}
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+```
+
+# Load Data
+```{r}
+
+```
+
+# Calculate Wind Load 
+Equation: Force = Area x Wind Pressure x Drag Coefficient
+Wind Pressure = 0.00256 x (Wind Speed)^2
+```{r}
+
+```
+
+
