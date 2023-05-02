@@ -1,0 +1,233 @@
+---
+title: "Wind Analysis: 1941-2022"
+author: "Naomi Lubkin"
+date: "5/1/2023"
+output: html_document
+---
+Updated wind analysis: 1941-2022
+
+#loading in libraries and data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#libraries
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(lubridate) #to separate month, year from date data type
+library(patchwork)
+library(trend)
+
+
+#data
+wind_2022 <- read_csv("Data/2022_wind.csv")
+hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+
+##cleaning data
+
+#hourly wind data, 1941-2021
+hourly_wind_41on <- hourly_wind %>%
+  #separate(date, c("year", "month", "day", "hour")) %>% #separating dates and times
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date))  %>%
+   filter(year >= 1941) %>%
+    mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#hourly wind data, 2022
+hourly_wind_22 <- wind_2022 %>%
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date)) %>%
+  select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#merging : dataframe with 1941-2022 hourly wind averages
+hourly_wind_41_22 <- rbind(hourly_wind_41on, hourly_wind_22)
+
+#daily averages from hourly
+daily_avg <- hourly_wind_41_22 %>%
+  group_by(date) %>%
+  summarize(wind_speed = mean(wind_speed),  #averaging hourly wind speeds by day
+            .groups = "drop") %>%
+  na.omit() %>%
+  mutate(month=month(date), #adding month column
+         month= as.numeric(month), #making sure month is numeric
+        year = year(date),  #adding year column
+         year=as.numeric(year),  #making sure year is numeric
+         wind_speed=as.numeric(wind_speed)) #making sure wind speed is numeric
+  
+#getting monthly wind speeds from daily
+monthly_avg <- daily_avg %>%
+  mutate(monyear = str_c(month, "-", year)) %>%
+  group_by(monyear) %>%
+  summarize(wind_speed = mean(wind_speed), 
+            .groups="drop") %>%
+  separate(monyear, into = c("month", "year"), sep = "-") %>%
+  mutate(homogenized_wind = ifelse(year <=1981, wind_speed*1.05, wind_speed)) %>%
+  mutate(year = as.numeric(year),
+         month = as.numeric(month))
+
+#seasonal averages 
+#where "winter 1942" refers to december 1941, jan 1942, feb 1942
+seasonal_avg <- daily_avg %>%
+  mutate(year_for_season =  case_when(month == 12 ~ year + 1, 
+                                  TRUE ~ year)) %>%
+  mutate(season = case_when(month == 12 ~ "Winter", 
+                            month == 1 ~ "Winter", 
+                            month == 2 ~ "Winter", 
+                            month == 3 ~ "Spring", 
+                            month == 4 ~ "Spring",
+                            month == 5 ~ "Spring",
+                            month == 6 ~ "Summer",
+                            month == 7 ~ "Summer",
+                            month == 8 ~ "Summer",
+                            month == 9 ~ "Fall",
+                            month == 10 ~ "Fall",
+                            month == 11 ~ "Fall")) %>%
+  mutate(year_for_season  = as.character(year_for_season), 
+     season_and_year = paste(season, year_for_season, sep="-")) %>%
+   group_by(season_and_year) %>%
+   summarize(sum_wind = sum(wind_speed), 
+            .groups = "drop") %>%
+   separate(season_and_year, into = c("season", "year"), sep = "-") %>%
+   mutate(year = as.numeric(year)) %>%
+    mutate(season_and_leapstatus = case_when(season == "Winter" & year == 1944 ~ "winter_leap",
+                                             season == "Winter" & year == 1948 ~ "winter_leap",
+                                             season == "Winter" & year == 1952 ~ "winter_leap",
+                                             season == "Winter" & year == 1956 ~ "winter_leap",
+                                             season == "Winter" & year == 1960 ~ "winter_leap",
+                                             season == "Winter" & year == 1964 ~ "winter_leap",
+                                             season == "Winter" & year == 1968 ~ "winter_leap",
+                                             season == "Winter" & year == 1972 ~ "winter_leap",
+                                             season == "Winter" & year == 1976 ~ "winter_leap",
+                                             season == "Winter" & year == 1980 ~ "winter_leap",
+                                             season == "Winter" & year == 1984 ~ "winter_leap",
+                                             season == "Winter" & year == 1988 ~ "winter_leap",
+                                             season == "Winter" & year == 1992 ~ "winter_leap",
+                                             season == "Winter" & year == 1996 ~ "winter_leap",
+                                             season == "Winter" & year == 2000 ~ "winter_leap",
+                                             season == "Winter" & year == 2004 ~ "winter_leap",
+                                             season == "Winter" & year == 2008 ~ "winter_leap",
+                                             season == "Winter" & year == 2012 ~ "winter_leap",
+                                             season == "Winter" & year == 2016 ~ "winter_leap",
+                                             season == "Winter" & year == 2020 ~ "winter_leap",
+                                             TRUE ~ season)) %>%
+    mutate(monthly_avg_wind = case_when(season == "Winter" ~ sum_wind/90,
+                         season == "winter_leap" ~ sum_wind/91, 
+                         season == "Spring" ~ sum_wind/92,
+                         season == "Summer" ~ sum_wind/92,
+                         season == "Fall" ~ sum_wind/91))
+
+seasonal_avg$season <- factor(seasonal_avg$season, levels=c("Winter", "Spring", "Summer", "Fall", "winter_leap"))
+
+#homogenized monthly values, by season 
+homogenized_seasonal <- seasonal_avg %>%
+  mutate(homogenized_wind = ifelse(year <=1981, monthly_avg_wind*1.05, monthly_avg_wind))
+
+#yearly average, with homogenization pre-1981
+yearly_avg <- daily_avg %>%
+  group_by(year) %>%
+  summarize(wind_speed = mean(wind_speed), 
+            .groups="drop") %>%
+  mutate(homogenized_wind = ifelse(year <=1981, wind_speed*1.05, wind_speed))
+
+```
+
+
+# plots
+```{r}
+#monthly average wind speed
+year_plot_homogenized <- ggplot(data = yearly_avg, aes(x = year, 
+                           y = homogenized_wind)) +
+  geom_point() +
+  ylim(0,45) +
+  labs (x = "Year", y = "Wind Speed (mph)", title="A. Homogenized" )+
+ # theme_classic() +
+  geom_vline(xintercept=1981, 
+             linetype="dotted")
+
+year_plot <- ggplot(data = yearly_avg, aes(x = year, 
+                           y = wind_speed)) +
+  geom_point() +
+  ylim(0,45) +
+  labs (x = "Year", y = "Wind Speed (mph)", title="B. Raw Data") +
+  #theme_classic() +
+  geom_vline(xintercept=1981, 
+             linetype="dotted")
+
+yearly_winds <- year_plot_homogenized + year_plot
+
+
+
+
+
+#seasonal plots 
+month_homogenized_plot <- ggplot(data = homogenized_seasonal, aes(x = year, 
+                           y = homogenized_wind)) +
+  geom_point(aes(colour = season), show.legend = "none") +
+  ylim(0,70) +
+  labs (x = "Year", y = "Wind Speed (mph)")+
+  theme_classic()+
+  geom_vline(xintercept=1981, 
+             linetype="dotted") +
+  facet_wrap(~season) 
+```
+
+
+#dataframes for each season 
+```{r}
+winter <- homogenized_seasonal %>%
+  filter(season == "Winter")
+
+spring <- homogenized_seasonal %>%
+  filter(season == "Spring")
+
+summer <-homogenized_seasonal %>%
+  filter(season == "Summer")
+
+fall <- homogenized_seasonal %>%
+  filter(season == "Fall")
+
+
+
+```
+
+
+Sen Slopes
+```{r}
+#homogenized data
+#annual 
+annual.sen<- sens.slope(yearly_avg$homogenized_wind, conf.level = 0.95)
+View(annual.sen)
+
+#monthly:
+monthly.sen<-sens.slope(monthly_avg$homogenized_wind, conf.level = 0.95)
+View(monthly.sen)
+
+#seasonal sens
+#winter
+winter.sen<-sens.slope(winter$homogenized_wind, conf.level = 0.95)
+View(winter.sen)
+
+#spring
+spring.sen<-sens.slope(spring$homogenized_wind, conf.level = 0.95)
+View(spring.sen)
+
+#summer
+summer.sen<-sens.slope(summer$homogenized_wind, conf.level = 0.95)
+View(summer.sen)
+
+#fall
+fall.sen<-sens.slope(fall$homogenized_wind, conf.level = 0.95)
+View(fall.sen)
+
+```
+
