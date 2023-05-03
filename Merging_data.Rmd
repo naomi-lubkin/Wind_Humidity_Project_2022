@@ -12,11 +12,9 @@ There was analysis done with both the 1981-2021 data and 1941-2021 data (see "ho
 
 # Packages
 ```{r, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
-
-knitr::opts_chunk$set(echo = TRUE)
-
 library(here)
 here::here()
 library(dplyr)
@@ -25,7 +23,7 @@ library(gamlss)
 library(pscl) #for hurdle model 
 ```
 
-# data
+# Data
 ```{r, message=FALSE}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
@@ -43,8 +41,8 @@ temp_2022 <- read_csv("Data/2022_temp_hourly.csv")
 synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>% 
   dplyr::select(-c(precipitation, precipitation_trace))
 
-bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>%  # NEED TO CONVERT DATE
-  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M"))
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>% 
+  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M", tz = "ETC"))
 pressure <- read_csv("Data/2022_RH_pressure.csv")
 
 synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
@@ -180,8 +178,7 @@ rh <- rh %>%
   filter(RH >= 0)
 ```
 
-
-# fog data stuff (OUTDATED, we are now basing fog off of RH)
+# Fog data stuff (OUTDATED, we are now basing fog off of RH)
 ```{r}
 ##FOG: present weather codes (OUTDATED: for final analysis, we used RH fog and not present weather fog)
 #sorting through present weather dataframe to select for hours with fog
@@ -228,9 +225,7 @@ hourly_fog_pres <- hourly_fog %>%
 
 ```
 
-
-#merge rh with hourly_wind
-#for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
+# Merge rh with hourly_wind for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
 ```{r}
 #filter for years of interest (1981-2022)
 hourly_wind_81 <- hourly_wind %>% 
@@ -418,11 +413,11 @@ plot_prop_jun <- prop_jun %>%
 ```
 
 
-##1941-2021!
-#events of note (freezing, fog, high winds) by month, with RH fog and homogenized wind data 1941-2021 (see homogenization.rmd for more details on homogenization)
+##1941-2022!
+#events of note (freezing, fog, high winds) by month, with RH fog and homogenized wind data 1941-2022 (see homogenization.rmd for more details on homogenization)
 ```{r}
 #clean data
-homogenized_hourly <- hourly_wind_41_22 %>% 
+homogenized_hourly <- hourly_wind %>% 
   filter(year(date) >= 1941) %>%
   mutate(wind_speed = as.numeric(wind_speed)) 
 
@@ -471,7 +466,7 @@ windfog100_41 <- merged_data_41 %>%
 ```
 
 
-#counts of events for each threshold, 1941-2021
+#counts of events for each threshold, 1941-2022
 
 ```{r}
 #events: 25 mph threshold
@@ -540,6 +535,7 @@ counts_final100_41 <- counts_100_41 %>%
 
 
 #making dataframes for each month, overall and for models, 1941-2022 events
+Overall plots added to figures
 ```{r}
 #25 mph threshold
 #first, each month separately, and then each month with just count and year columns for models
@@ -548,7 +544,6 @@ above25_oct_41 <- counts_final25_41 %>%
   filter(month == 10)
 above25oct_formod_41 <- above25_oct_41 %>%
   dplyr::select(count_events, year)
-
 
 #nov
 above25_nov_41 <- counts_final25_41 %>%
@@ -602,12 +597,16 @@ above25jun_formod_41 <- above25_jun_41 %>%
 # overall
 counts_final25_41_sum <- counts_final25_41 %>% 
   group_by(year) %>% 
-  summarize(total_events_yr = mean(count_events))
+  summarize(total_events_yr = sum(count_events))
+
+pdf(file = "Figures/25mph_threshold_1941.pdf",   # The directory to save the file in
+    width = 9,height = 5)
 ggplot(counts_final25_41_sum, aes(year, total_events_yr)) +
   geom_point() +
   theme_minimal() +
   geom_smooth(method = "lm", se = F, color = "grey") +
-  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 25 mph Threshold", subtitle = "1941-2021")
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 25 mph Threshold", subtitle = "1941-2022")
+dev.off()
 
 #sens slope for overall
 
@@ -677,10 +676,16 @@ above60jun_formod_41 <- above60_jun_41 %>%
 counts_final60_41_sum <- counts_final60_41 %>% 
   group_by(year) %>% 
   summarize(total_events_yr = mean(count_events))
+
+pdf(file = "Figures/60mph_threshold_1941.pdf",   # The directory to save the file in
+    width = 9,height = 5)
 ggplot(counts_final60_41_sum, aes(year, total_events_yr)) +
   geom_point() +
   theme_minimal() +
-  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 60 mph Threshold", subtitle = "1941-2021")
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 60 mph Threshold", subtitle = "1941-2022")
+dev.off()
+
+
 
 #sens slope for overall
 t60.sen <- sens.slope(counts_final60_41_sum$total_events_yr, conf.level = 0.95)
@@ -752,11 +757,14 @@ above100jun_formod_41 <- above100_jun_41 %>%
 counts_final100_41_sum <- counts_final100_41 %>% 
   group_by(year) %>% 
   summarize(total_events_yr = sum(count_events))
+
+pdf(file = "Figures/100mph_threshold_1941.pdf", width = 9, height = 5)
 ggplot(counts_final100_41_sum, aes(year, total_events_yr)) +
   geom_point() +
   theme_minimal() +
   #scale_y_continuous(breaks = seq(0, 20, by = 1)) +
-  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 100 mph Threshold", subtitle = "1941-2021")
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 100 mph Threshold", subtitle = "1941-2022")
+dev.off()
 
 #sens slope for overall
 t100.sen <- sens.slope(counts_final100_41_sum$total_events_yr, conf.level = 0.95)
@@ -765,7 +773,7 @@ t100.sen[["p.value"]]
 
 ```
 
-#plots: events 1941-2021
+#plots: events 1941-2022
 ```{r}
 #25 mph threshold
 #oct
@@ -1063,7 +1071,7 @@ summary(oct_hurdle.mod)
 ```
 
 
-#stats: events 1941-2021
+#stats: events 1941-2022
 
 ```{r}
 #25 mph threshold
@@ -1373,7 +1381,7 @@ summary(mod_above60_jun_41)
 ```
 
 ###############################################################################
-# #1981-2021!
+# #1981-2022!
 #looking at events of note (freezing, fog, high winds) by month, with RH instead of present weather codes to determine fog, 1981-2021
 ## Making datasets for each wind threshold, 1981-2021 
 ```{r}
@@ -1466,7 +1474,7 @@ count_total_events_100 <- count_total_100 %>%
 #   mutate(events = n) %>% 
 #   mutate(monyear = str_c(month, "-", year))
 
-counts_100 <- merge(count_total, count_total_events, by = 'monyear')# %>% 
+counts_100 <- merge(count_total_100, count_total_events_100, by = 'monyear')# %>% 
   #select(monyear, wind_fog, events, total) %>% 
   #mutate(event_count = ifelse(length(monyear) == 2, events, 0))
 counts_final100 <- counts_100 %>%
@@ -1733,7 +1741,7 @@ above25_jun_plot <- above25_jun %>%
 
 #all together 25 mph
 allmonths_25<- (above25_nov_plot | above25_dec_plot | above25_jan_plot | above25_feb_plot)/ (above25_mar_plot | above25_apr_plot | above25_may_plot | above25_jun_plot) 
-allmonths_25  + plot_annotation(title='Fog, Freezing, and above 25 mph wind hours 1981-2021')
+allmonths_25  + plot_annotation(title='Fog, Freezing, and above 25 mph wind hours 1981-2022')
 
 
 
@@ -1821,7 +1829,7 @@ above60_jun_plot <- above60_jun %>%
 
 #all together 60 mph
 allmonths_60<- (above60_nov_plot | above60_dec_plot | above60_jan_plot | above60_feb_plot)/ (above60_mar_plot | above60_apr_plot | above60_may_plot | above60_jun_plot) 
-allmonths_60  + plot_annotation(title='Fog, Freezing, and above 60 mph wind hours 1981-2021')
+allmonths_60  + plot_annotation(title='Fog, Freezing, and above 60 mph wind hours 1981-2022')
 
 
 
@@ -1907,7 +1915,7 @@ above100_jun_plot <- above100_jun %>%
 
 #all together 100 mph
 allmonths_100<- (above100_nov_plot | above100_dec_plot | above100_jan_plot | above100_feb_plot)/ (above100_mar_plot | above100_apr_plot | above100_may_plot | above100_jun_plot) 
-allmonths_100  + plot_annotation(title='Fog, Freezing, and above 100 mph wind hours 1981-2021')
+allmonths_100  + plot_annotation(title='Fog, Freezing, and above 100 mph wind hours 1981-2022')
 
 
 
