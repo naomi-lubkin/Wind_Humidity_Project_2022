@@ -22,15 +22,16 @@ knitr::opts_chunk$set(echo = TRUE)
 # Load in Data
 ```{r, show_col_types = FALSE}
 synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>% 
-  select(-c(precipitation, precipitation_trace))
+  dplyr::select(-c(precipitation, precipitation_trace))
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 # Adding 2022 for synoptic
-bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") # GET NEW ONE FROM JAY
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>%  # NEED TO CONVERT DATE
+  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M"))
 pressure <- read_csv("Data/2022_RH_pressure.csv")
 
 synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
-  select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
+  dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
   
 synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
 ```

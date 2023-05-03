@@ -11,7 +11,7 @@ There was analysis done with both the 1981-2021 data and 1941-2021 data (see "ho
 
 
 # Packages
-```{r}
+```{r, message=FALSE}
 library(tidyverse)
 library(lubridate)
 
@@ -26,58 +26,72 @@ library(pscl) #for hurdle model
 ```
 
 # data
-```{r}
+```{r, message=FALSE}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
-#b16 hourly daily wind speed, jan 1935-dec2021
-hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+#wind data
+hourly_wind_raw <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+wind_2022 <- read_csv("Data/2022_wind.csv")
 
-hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv")
+#temp data
+hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv") %>% 
+  mutate(temperature = as.numeric(temperature)) 
+temp_2022 <- read_csv("Data/2022_temp_hourly.csv")
 
-synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv")
+#rh data
+synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>% 
+  dplyr::select(-c(precipitation, precipitation_trace))
+
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>%  # NEED TO CONVERT DATE
+  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M"))
+pressure <- read_csv("Data/2022_RH_pressure.csv")
+
+synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
+  dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way
 
 ```
 
 # Update to add 2022 data (doesn't include weather codes)
 ```{r}
-## Wind: cleaning data
+## WIND
 
 #hourly wind data, 1941-2021
-hourly_wind_41on <- hourly_wind %>%
-  #separate(date, c("year", "month", "day", "hour")) %>% #separating dates and times
-  separate(date, into = c("date", "time"), sep = " ") %>%
-  mutate(date = as.Date(date),
-          month=month(date),
-          year = year(date))  %>%
-   filter(year >= 1941) %>%
-    mutate(year=as.numeric(year), 
-         month=as.numeric(month), 
-         wind_speed=as.numeric(wind_speed))
+hourly_wind_41on <- hourly_wind_raw %>% 
+   filter(year(date) >= 1941) 
 
 #hourly wind data, 2022
-hourly_wind_22 <- wind_2022 %>%
-  separate(date, into = c("date", "time"), sep = " ") %>%
-  mutate(date = as.Date(date),
-          month=month(date),
-          year = year(date)) %>%
-  select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
-  mutate(year=as.numeric(year), 
-         month=as.numeric(month), 
-         wind_speed=as.numeric(wind_speed))
+hourly_wind_22 <- wind_2022 %>% 
+  dplyr::select(date, wind_speed) #same columns as 1941 data for merge
 
 #merging : dataframe with 1941-2022 hourly wind averages
-hourly_wind_41_22 <- rbind(hourly_wind_41on, hourly_wind_22)
+hourly_wind <- rbind(hourly_wind_41on, hourly_wind_22)
+
+
 
 
 ## RH
-bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") # GET NEW ONE FROM JAY
-pressure <- read_csv("Data/2022_RH_pressure.csv")
 
 synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
-  select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
+  dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
   
 synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
+
+
+
+
+## TEMP
+
+#round up hour
+temp_2022 <- temp_2022 %>% 
+  mutate(time = round_date(temp_2022$time, unit = "hour"), temperature = f_temp, date = time) %>% 
+  dplyr::select(date, temperature) 
+
+hourly_temp <- hourly_temp %>% 
+  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"))
+
+hourly_temp <- rbind(hourly_temp, temp_2022)
+
 ```
 
 # Clean synoptic data
@@ -86,8 +100,7 @@ synoptic <- synoptic %>%
   filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
   mutate(dry_bulb = as.numeric(dry_bulb), 
          wet_bulb = as.numeric(wet_bulb), 
-         pressure_mb = as.numeric(pressure_mb), 
-         precipitation = as.numeric(precipitation)) %>% # switch from chr to dbl
+         pressure_mb = as.numeric(pressure_mb)) %>% # switch from chr to dbl
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10) %>%  # no gaps larger than 10 degrees between wet and dry)
   filter() # UPDATE: no 20 degress increases between readings
@@ -168,7 +181,7 @@ rh <- rh %>%
 ```
 
 
-# fog data stuff
+# fog data stuff (OUTDATED, we are now basing fog off of RH)
 ```{r}
 ##FOG: present weather codes (OUTDATED: for final analysis, we used RH fog and not present weather fog)
 #sorting through present weather dataframe to select for hours with fog
@@ -217,13 +230,13 @@ hourly_fog_pres <- hourly_fog %>%
 
 
 #merge rh with hourly_wind
-#for 1981-2021 (merging wind with homogenized 1941-2021 wind data is below)
+#for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
 ```{r}
-#filter for years of interest (1981-2021)
-hourly_wind <- hourly_wind_raw %>% 
+#filter for years of interest (1981-2022)
+hourly_wind_81 <- hourly_wind %>% 
   filter(year(date) >= 1981)
-#filter for other years of interest (1941-2021)
-hourly_wind_41 <- hourly_wind_raw %>% 
+#filter for other years of interest (1941-2022)
+hourly_wind_41 <- hourly_wind %>% 
   filter(year(date) >= 1941)
 
 
@@ -231,17 +244,13 @@ hourly_wind_41 <- hourly_wind_raw %>%
 hourly_wind <- hourly_wind %>% 
   mutate(date = floor_date(hourly_wind$date, unit = "hour"))
 
-#round up hour
-hourly_temp <- hourly_temp %>% 
-  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"), temperature = as.numeric(temperature))
-
 # round down hour for fog
 hourly_fog_pres <- hourly_fog_pres %>% 
   mutate(date = floor_date(hourly_fog_pres$date, unit = "hour"))
 
 #merge RH and hourly wind data
 merged_data <- merge(rh, hourly_wind, by = 'date') %>% 
-  dplyr::select(date, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  wind_speed)
+  dplyr::select(date, dry_bulb, wet_bulb, pressure_mb, RH,  wind_speed)
 
 #and merge in hourly temp data
 merged_data <- merge(hourly_temp, merged_data, by = 'date')
@@ -249,7 +258,7 @@ merged_data <- merge(hourly_temp, merged_data, by = 'date')
 merged_data <- merge(hourly_fog_pres, merged_data, by ='date')  
 #and select relevant columns
 merged_data <- merged_data %>% 
-  dplyr::select(date, true_fog, temperature, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  wind_speed)
+  dplyr::select(date, true_fog, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  wind_speed)
 
 # making wind_speed numeric
 merged_data <- merged_data %>% 
@@ -258,7 +267,7 @@ merged_data <- merged_data %>%
 #checking temp overlap
 ggplot(merged_data, aes(date, temperature)) +
   geom_line() +
-  geom_line(aes(x = date, y = dry_bulb), col = "red", alpha = 0.5)
+  geom_line(aes(x = date, y = dry_bulb), col = "red", alpha = 0.3)
 ```
 
 #COMPARISON: fog w/ pres weather codes (F and no GF) vs. fog w/ RH (rh>=96%)
@@ -413,12 +422,12 @@ plot_prop_jun <- prop_jun %>%
 #events of note (freezing, fog, high winds) by month, with RH fog and homogenized wind data 1941-2021 (see homogenization.rmd for more details on homogenization)
 ```{r}
 #clean data
-homogenized_hourly <- hourly_wind_41 %>% 
+homogenized_hourly <- hourly_wind_41_22 %>% 
   filter(year(date) >= 1941) %>%
   mutate(wind_speed = as.numeric(wind_speed)) 
 
 homogenized_hourly <- homogenized_hourly %>%
-  mutate(homogenized_wind = ifelse(year(date) <=1981, homogenized_hourly$wind_speed*1.05, homogenized_hourly$wind_speed))
+  mutate(homogenized_wind = ifelse(year(date) <=1981, homogenized_hourly$wind_speed*1.05, homogenized_hourly$wind_speed)) 
 
 #round hourly wind data down to the nearest hour
 homogenized_hourly <- homogenized_hourly %>%
@@ -437,12 +446,12 @@ merged_data_41 <- merge(hourly_temp, merged_data_41, by = 'date')
 
 #and select relevant columns
 merged_data_41 <- merged_data_41 %>% 
-  dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, precipitation, RH,  homogenized_wind)
+  dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  homogenized_wind)
 
 
 ```
 
-#datasets for each wind threshold, 1941-2021
+#datasets for each wind threshold, 1941-2022
 ```{r}
 #25mph threshold
 #wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 25mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
@@ -530,7 +539,7 @@ counts_final100_41 <- counts_100_41 %>%
 ```
 
 
-#making dataframes for each month, overall and for models, 1941-2021 events
+#making dataframes for each month, overall and for models, 1941-2022 events
 ```{r}
 #25 mph threshold
 #first, each month separately, and then each month with just count and year columns for models
