@@ -160,6 +160,7 @@ season_summary <- season_rh %>%
 
 
 # Seasonal comparisons
+
 ```{r}
 ## Linear regression of seasonal data for all season 1935 - 2022, using seasonal averages
 
@@ -169,8 +170,7 @@ fall_rh <- season_summary %>%
 
 fall.lm = lm(average_RH ~ year_for_winter, data = fall_rh)
 summary(fall.lm)
-# p-value  = 0.7422
-# adjusted r-squared = -0.01047
+
 
 
 # spring
@@ -179,8 +179,7 @@ spring_rh <- season_summary %>%
 
 spring.lm = lm(average_RH ~ year_for_winter, data = spring_rh)
 summary(spring.lm)
-# p-value  = 0.02176**
-# adjusted r-squared = 0.04935
+
 
 # summer
 summer_rh <- season_summary %>% 
@@ -188,8 +187,7 @@ summer_rh <- season_summary %>%
 
 summer.lm = lm(average_RH ~ year_for_winter, data = summer_rh)
 summary(summer.lm)
-# p-value  = 0.9739
-# adjusted r-squared = -0.01175
+
 
 # winter
 winter_rh <- season_summary %>% 
@@ -197,8 +195,7 @@ winter_rh <- season_summary %>%
 
 winter.lm = lm(average_RH ~ year_for_winter, data = winter_rh)
 summary(winter.lm)
-# p-value  = 0.6936
-# adjusted r-squared = -0.009793
+
 
 
 
@@ -207,49 +204,60 @@ summary(winter.lm)
 # Fall
 fall.sen <- sens.slope(fall_rh$average_RH, conf.level = 0.95)
 #View(fall.sen)
-fall.sen[["p.value"]] # 0.8373378
+fall.sen[["p.value"]]
 
 # Winter
 winter.sen <- sens.slope(winter_rh$average_RH, conf.level = 0.95)
 #View(winter.sen)
-winter.sen[["p.value"]] # 0.7429325
+winter.sen[["p.value"]] 
 
 # Spring
 spring.sen <- sens.slope(spring_rh$average_RH, conf.level = 0.95)
 #View(spring.sen)
-spring.sen[["p.value"]] # 0.01375496**
+spring.sen[["p.value"]] 
 
 # Summer
 summer.sen <- sens.slope(summer_rh$average_RH, conf.level = 0.95)
 #View(summer.sen)
-summer.sen[["p.value"]] # 0.8776295
+summer.sen[["p.value"]] 
 
 
 ## VISUALS
 
 # all seasons on one graph
+pdf(file = "Figures/humidities_seasons.pdf")
 season_summary %>% 
   ggplot(aes(year_for_winter, average_RH, color = season)) +
   geom_point() +
   geom_smooth(method = lm, se = FALSE) +
   facet_wrap(~season) +
   labs(title = "Average Relative Humidities by Season", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)", caption = "Note: Winter graph groups winter months consecutively (e.g. December of 1996, January of 1997, and February of 1997)") 
+dev.off()
 
 # spring
+pdf(file = "Figures/humidities_spring_1935.pdf", width = 8, height = 5)
 spring_rh %>% 
   ggplot(aes(year_for_winter, average_RH)) +
   geom_point() +
   geom_smooth(method = lm, se = FALSE, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") 
+  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") +
+  annotate("text", x=1955, y=91, label = paste("p-value =", round((spring.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=1955, y=91.5, label = paste("Sen's Slope =", round((spring.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
+
 
 # winter
+pdf(file = "Figures/humidities_winter_1935.pdf", width = 8, height = 5)
 winter_rh %>% 
   ggplot(aes(year_for_winter, average_RH)) +
   geom_point() +
   geom_smooth(method = lm, se = FALSE, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") 
+  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") +
+  annotate("text", x=2015, y=94.2, label = paste("p-value =", round((winter.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=94.5, label = paste("Sen's Slope =", round((winter.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
 ```
 
 Spring is showing significant trends, but with very small slope
@@ -349,12 +357,14 @@ month_rh$month_name <- factor(month_rh$month_name, levels = c("January", "Februa
 
 
 # RH by month
+pdf(file = "Figures/avg_humidity_over_year.pdf", width = 8, height = 5)
 ggplot(month_rh, aes(as.factor(month_name), average_RH)) + 
   geom_boxplot(fill = "grey", outlier.shape = 1) + 
   theme_classic() +
   theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
   labs(x = "Month", y = "Relative Humidity (%)") +
   ggtitle("Monthly Average Relative Humidities 1941-2022")
+dev.off()
 ```
 
 
@@ -632,20 +642,22 @@ jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec
 ```{r}
 year_rh <- rh %>% 
   group_by(year) %>% 
-  summarize(avg_rh = mean(avg_rh))
+  summarize(avg_rh = mean(RH))
 
 
+pdf(file = "Figures/rh_annual_1941.pdf", width = 8, height = 5)
+year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
 ggplot(year_rh, aes(year, avg_rh)) +
   geom_point() +
   theme_minimal() +
-  ylim(60, 100) +
+  ylim(70, 100) +
   xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
   labs(x = "Year", y = "Relative Humidity (%)") +
-  ggtitle("Average Relative Humidities 1941-2022")
+  ggtitle("Average Relative Humidities 1941-2022") + 
+  annotate("text", x=2015, y=97, label = paste("p-value =", round((year.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=99, label = paste("Sen's Slope =", round((year.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
 
-year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
-#View(year.sen)
-year.sen[["p.value"]]
 ```
 
 
