@@ -679,12 +679,17 @@ clear_summary <- clear %>%
   summarize(avg_rh = mean(RH))
 
 # visual: dotplot
+pdf(file = "Figures/rh_in_the_clear.pdf", width = 8, height = 5)
+clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
 clear_summary %>% 
   ggplot(aes(x = year, y = avg_rh)) + 
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
-  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2022", x = "Year", y = "Average Relative Humidity (%)")
+  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2022", x = "Year", y = "Average Relative Humidity (%)") + 
+  annotate("text", x=2015, y=85.8, label = paste("p-value =", round((clear.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=86.2, label = paste("Sen's Slope =", round((clear.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
 
 # analysis (Sen's Slope)
 clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
@@ -714,12 +719,13 @@ ff_overall <- season_rh %>%
   summarise(ff = n_class/n_total, Class = Class)
 
 # visual: seasonal          SHOULD I INCORPORATE OVERALL HERE?
+pdf(file = "Figures/ff_season.pdf", width = 8, height = 5)
 ggplot(ff_seasonal, aes(x = season, y = ff, fill = Class)) + 
   geom_col() +
   scale_fill_manual(values =c("skyblue", "darkgrey")) +
   theme_minimal() +
   labs(title = "Frequency of days spent in the clear and in the fog", subtitle = "1935-2022", x = "Season", y = "")
-  
+dev.off()
   
   
 # trends
@@ -747,21 +753,6 @@ View(ff_sen)
 
 # Annual trend table 
 ```{r}
-# add decade column --- Nevermind!
-# decadal <- season_rh %>% 
-#   mutate(year = as.character(year),
-#     decade = case_when(
-#            year <= 1945 ~ "1",
-#            between(year, 1946, 1955)  ~ "2",
-#            between(year, 1956, 1965)  ~ "3",
-#            between(year, 1966, 1975)  ~ "4",
-#            between(year, 1976, 1985)  ~ "5",
-#            between(year, 1986, 1995)  ~ "6",
-#            between(year, 1996, 2005)  ~ "7",
-#            between(year, 2006, 2015)  ~ "8",
-#            between(year, 2016, 2022)  ~ "9", #this is not a full decade.... is this an issue?
-#            TRUE ~ NA_character_))
-
 
 ## Overall data
 
@@ -818,7 +809,7 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
          annual_trend = format(round(annual_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Annual trend" = ifelse(p <= 0.05, str_c(annual_trend, "*"), annual_trend), # add asterisks
          "p-value" = p) %>% 
-  dplyr::select(" ", "Annual trend", "p-value") %>% 
+  dplyr::select(" ", "Annual trend") %>% 
   distinct() %>%   # removes rows with repeat values
   
   as.data.frame(html_table()) 
@@ -828,7 +819,8 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
 
 # Making the table, KableExtra package
 
-annual_trends_all %>%
+
+rh_table <- annual_trends_all %>%
   kbl(caption = "Annual Trends of Relative Humidity from 1935-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>% 
@@ -837,7 +829,7 @@ annual_trends_all %>%
   #collapse_rows(columns = 1, valign = "top") %>%  #not working for some reason, but would be ideal grouping
   add_indent(positions = 1:10, level_of_indent = 2, all_cols = T)
 
-
+save_kable(rh_table, file = "Figures/humidity_table.pdf")
 
 ```
 
