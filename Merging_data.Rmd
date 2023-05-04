@@ -1555,6 +1555,20 @@ above25jun_formod <- above25_jun %>%
   dplyr::select(count_events, year)
 
 
+# overall
+counts_final25_sum <- counts_final25 %>% 
+  group_by(year) %>% 
+  summarize(total_events_yr = sum(count_events))
+
+pdf(file = "Figures/25mph_threshold_1981.pdf", width = 8, height = 5)
+t25_81.sen <- sens.slope(counts_final25_sum$total_events_yr, conf.level = 0.95) #sens slope for overall
+ggplot(counts_final25_sum, aes(year, total_events_yr)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 25 mph Threshold", subtitle = "1981-2022") +
+  annotate("text", x=2015, y=550, label = paste("p-value =", round((t25_81.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=570, label = paste("Sen's Slope =", round(t25_81.sen[["estimates"]][["Sen's slope"]], digits = 3)))
+dev.off()
 
 #above 60 mph wind threshold
 #first, each month separately, and then each month with just count and year columns for models
