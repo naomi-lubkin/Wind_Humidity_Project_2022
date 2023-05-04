@@ -26,7 +26,7 @@ library(pscl) #for hurdle model
 # Data
 ```{r, message=FALSE}
 #b16 hourly present weather, split by code, jan 1935-dec 2021
-pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
+#pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 #wind data
 hourly_wind_raw <- read_csv("Data/b16-hourly wind 1935-2021.csv")
@@ -44,9 +44,6 @@ synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>%
 bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>% 
   mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M", tz = "ETC"))
 pressure <- read_csv("Data/2022_RH_pressure.csv")
-
-synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
-  dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way
 
 ```
 
@@ -178,52 +175,6 @@ rh <- rh %>%
   filter(RH >= 0)
 ```
 
-# Fog data stuff (OUTDATED, we are now basing fog off of RH)
-```{r}
-##FOG: present weather codes (OUTDATED: for final analysis, we used RH fog and not present weather fog)
-#sorting through present weather dataframe to select for hours with fog
-#"F" means fog was coded for the previous hour, "no_fog" means no fog coded 
-
-hourly_fog <- pres_weather %>%
-  mutate(fog= case_when(
-    pw1 == "F" ~"F", 
-    pw2 == "F" ~"F", 
-    pw3 =="F" ~"F", 
-    pw4 == "F" ~"F", 
-    pw5 == "F" ~"F", 
-    pw6 == "F" ~"F", 
-    pw7 == "F" ~"F", 
-    pw8 == "F" ~"F", 
-    pw9 == "F" ~"F", 
-    TRUE ~ "no_fog"))
-#"Y" means there was GF (intermittent/patchy fog) coded for the previous hour. 
-#no_fake_fog means that GF was NOT coded 
-hourly_fog <- hourly_fog %>%
-  mutate(fake_fog = case_when (
-    pw1 == "GF" ~ "Y", 
-    pw2 == "GF" ~ "Y",
-    pw3 == "GF" ~ "Y", 
-    pw4 == "GF" ~ "Y", 
-    pw5 == "GF" ~ "Y", 
-    pw6 == "GF" ~ "Y", 
-    pw7 == "GF" ~ "Y", 
-    pw8 == "GF" ~ "Y", 
-    pw9 == "GF" ~ "Y", 
-    TRUE ~ "no_fake_fog")) 
-#true fog column returns a Y when "F" (fog) is coded for the hour, and "GF" (intermittent/patches of fog) is not
-#selecting just for fog and date columns, because those are needed for the merge
-hourly_fog_pres <- hourly_fog %>%
-  mutate(true_fog = case_when (
-    (fog == "F") & (fake_fog == "no_fake_fog") ~ "F", 
-    TRUE ~ "NF")) %>%
-  dplyr::select(true_fog, date) %>%
-  mutate(date = floor_date(hourly_fog$date, unit = "hour"))
-
-#fog dataset with RH to determine fog
-#(will go here eventually, need RH's with below freezing)
-
-
-```
 
 # Merge rh with hourly_wind for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
 ```{r}
@@ -250,10 +201,11 @@ merged_data <- merge(rh, hourly_wind, by = 'date') %>%
 #and merge in hourly temp data
 merged_data <- merge(hourly_temp, merged_data, by = 'date')
 #and merge in hourly fog data
-merged_data <- merge(hourly_fog_pres, merged_data, by ='date')  
+#merged_data <- merge(hourly_fog_pres, merged_data, by ='date')  # don't have 2022 update and not using for analysis
+
 #and select relevant columns
 merged_data <- merged_data %>% 
-  dplyr::select(date, true_fog, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  wind_speed)
+  dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  wind_speed)
 
 # making wind_speed numeric
 merged_data <- merged_data %>% 
@@ -265,152 +217,6 @@ ggplot(merged_data, aes(date, temperature)) +
   geom_line(aes(x = date, y = dry_bulb), col = "red", alpha = 0.3)
 ```
 
-#COMPARISON: fog w/ pres weather codes (F and no GF) vs. fog w/ RH (rh>=96%)
-```{r}
-#analyzing what % of time pres weather codes and RH match
-
-#making a column that returns "F" if RH is 96% or above
-
-fog_comparison <- merged_data %>% 
-  mutate(fog_rh = ifelse((RH>=96), "F", "NF")) %>%
-  rename(fog_pres = true_fog) %>%
-  mutate(match = ifelse(fog_rh == fog_pres, "y_match", "n_match")) %>%
-  mutate(date = as.Date(date), 
-         month=month(date), 
-         year = year(date)) 
-fog_comparison$monyear <- str_c(fog_comparison$month, "-", fog_comparison$year)
-fog_comparison <- fog_comparison %>%
-  dplyr::select(date, match, fog_pres, fog_rh, RH, temperature, dry_bulb, wet_bulb, monyear)
-
-#getting count data for y/n  fog hours (respectively) for each monyear
-count_fogs <- fog_comparison %>%
-  count(match, monyear) %>%
-  filter(match == "y_match")
-fog_sums <- aggregate(n ~ monyear, count_fogs, FUN = sum)
-fog_proportions <- merge(fog_sums, count_fogs, by = "monyear") %>%
-  rename(y_match = n.y, 
-         total = n.x) %>%
-  separate(monyear, c("month", "year"), sep='-') %>%
-  mutate(proportion = y_match/total) %>%
-  mutate(year=as.numeric(year))
-
-
-```
-
-
-#Plotting proportion of time that fog reported by pres weather vs RH matches 
-
-```{r}
-#comparison overall
-plot_fogprop_overall <- fog_proportions %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point()
-
-#comparison by month
-#first, making dataframes
-#nov
-prop_nov <- fog_proportions %>%
-  filter(month == 11)
-
-#dec
-prop_dec <- fog_proportions %>%
-  filter(month == 12)
-
-#jan
-prop_jan <- fog_proportions %>%
-  filter(month == 1)
-
-#feb
-prop_feb <- fog_proportions %>%
-  filter(month == 2)
-
-#mar
-prop_mar <- fog_proportions %>%
-  filter(month == 3)
-
-#apr
-prop_apr <- fog_proportions %>%
-  filter(month == 4)
-
-#may
-prop_may <- fog_proportions %>%
-  filter(month == 5)
-
-#jun
-prop_jun <- fog_proportions %>%
-  filter(month == 6)
-
-#and plotting by month
-#nov 
-plot_prop_nov <- prop_nov %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("November") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion") 
-
-#dec
-plot_prop_dec <- prop_dec %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("December") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#jan
-plot_prop_jan <- prop_jan %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("January") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#feb
-plot_prop_feb <- prop_feb %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("February") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#mar
-plot_prop_mar <- prop_mar %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("March") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#apr
-plot_prop_apr <- prop_apr %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("April") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#may
-plot_prop_may <- prop_may %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("May") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#jun
-plot_prop_jun <- prop_jun %>%
-  ggplot(aes(x=year, y=proportion)) +
-  geom_point() +
-  ggtitle("June") +
-  theme(axis.text.x = element_text(angle = 60)) +
-  labs(x="Year", y="Proportion")
-
-#combo of months plot
-# (plot_prop_nov | plot_prop_dec | plot_prop_jan | plot_prop_feb) / 
-#   (plot_prop_mar | plot_prop_apr | plot_prop_may | plot_prop_jun) + plot_annotation(title = "Proportion of times RH fog matches coded fog, by month")
-  
-
-```
 
 
 ##1941-2022!
@@ -604,7 +410,6 @@ t25.sen <- sens.slope(counts_final25_41_sum$total_events_yr, conf.level = 0.95) 
 ggplot(counts_final25_41_sum, aes(year, total_events_yr)) +
   geom_point() +
   theme_minimal() +
-  geom_smooth(method = "lm", se = F, color = "grey") +
   labs(x = 'Year', y = "Number of Events", title = "Number of Events at 25 mph Threshold", subtitle = "1941-2022") +
   annotate("text", x=2015, y=550, label = paste("p-value =", round((t25.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=570, label = paste("Sen's Slope =", round(t25.sen[["estimates"]][["Sen's slope"]], digits = 3)))
@@ -1620,6 +1425,25 @@ above60_jun <- counts_final60 %>%
 above60jun_formod <- above60_jun %>%
   dplyr::select(count_events, year)
 
+# overall
+counts_final60_sum <- counts_final60 %>% 
+  group_by(year) %>% 
+  summarize(total_events_yr = sum(count_events))
+
+pdf(file = "Figures/60mph_threshold_1981.pdf", width = 8, height = 5)
+t60_81.sen <- sens.slope(counts_final60_sum$total_events_yr, conf.level = 0.95) #sens slope for overall
+ggplot(counts_final60_sum, aes(year, total_events_yr)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 60 mph Threshold", subtitle = "1981-2022") +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  annotate("text", x=2015, y=195, label = paste("p-value =", round((t60_81.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=205, label = paste("Sen's Slope =", round(t60_81.sen[["estimates"]][["Sen's slope"]], digits = 3)))
+dev.off()
+
+
+
+
 #above 100 mph wind threshold 
 #first, each month separately, and then each month with just count and year columns for models
 #nov
@@ -1669,6 +1493,23 @@ above100_jun <- counts_final100 %>%
   filter(month == 6)
 above100jun_formod <- above100_jun %>%
   dplyr::select(count_events, year)
+
+# overall
+counts_final100_sum <- counts_final100 %>% 
+  group_by(year) %>% 
+  summarize(total_events_yr = sum(count_events))
+
+pdf(file = "Figures/100mph_threshold_1981.pdf", width = 8, height = 5)
+t100_81.sen <- sens.slope(counts_final100_sum$total_events_yr, conf.level = 0.95) #sens slope for overall
+ggplot(counts_final100_sum, aes(year, total_events_yr)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = 'Year', y = "Number of Events", title = "Number of Events at 100 mph Threshold", subtitle = "1981-2022") +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  annotate("text", x=2015, y=9, label = paste("p-value =", round((t100_81.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=10, label = paste("Sen's Slope =", round(t100_81.sen[["estimates"]][["Sen's slope"]], digits = 3)))
+dev.off()
+
 ```
 
 
