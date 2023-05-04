@@ -12,7 +12,6 @@ This rmd contains a seasonal wind analysis that we didn't end up going any farth
 
 library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 library(here)
 here::here()
 library(lubridate)
@@ -45,7 +44,7 @@ daily_sum <- read_csv(here("Data", "b16 daily wind sum 1935-2021.csv"))
 
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 #likely needs cleaning
-pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021.csv"))
 
 #b16 synoptic data jan 1935-dec 2021
 #3x daily dry bulb temp, wet bulb temp, pressure, and precipitation
@@ -66,13 +65,12 @@ monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.
 #b16 yearly average wind speed (from hourly averages), jan 1935- dec 2021
 yearly_avg <-read_csv(here("Data", "b16-hourly yearly wind average 1935-2021.csv"))
 
-#get some metadata for this one
-stage_office_peak_5_sec_gusts <- read_csv(here("Data", "ft-tech-stage office peak 5 sec gusts.csv"))
+# NOT NEEDED 
 
 #hourly speed and direction 1935-2021
-hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
+#hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
 
-hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
+#hourly_temp <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly temperature 1935-2021.csv")
 
 
 ```
@@ -178,14 +176,14 @@ monthly_81to13 <- monthly_since81 %>%
 monthly_avg_decomp <- monthly_avg %>%
   mutate (year = year(date), 
           month = month(date)) %>%
-  select(year, month, monthly_avg_spd)
+  dplyr::select(year, month, monthly_avg_spd)
 monthly_avg_decomp <- ts(monthly_avg_decomp$monthly_avg_spd, frequency=12)
 decomp <- decompose(monthly_avg_decomp)
 plot(decomp)
 
 #monthly 1981-2021
 monthly_decomp_81 <- monthly_since81 %>%
-  select(year, month, monthly_avg_spd)
+  dplyr::select(year, month, monthly_avg_spd)
 monthly_decomp_81 <- ts(monthly_decomp_81$monthly_avg_spd, frequency=12)
 decomp81 <- decompose(monthly_decomp_81)
 plot(decomp81)

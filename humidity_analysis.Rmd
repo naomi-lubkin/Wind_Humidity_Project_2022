@@ -26,12 +26,12 @@ synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>%
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 # Adding 2022 for synoptic
-bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>%  # NEED TO CONVERT DATE
-  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M"))
-pressure <- read_csv("Data/2022_RH_pressure.csv")
-
-synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
+bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>% 
+  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M", tz = "ETC"))
+pressure <- read_csv("Data/2022_RH_pressure.csv") %>%
   dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
+
+synoptic_2022 <- full_join(bulb, pressure, by = "date") 
   
 synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
 ```
