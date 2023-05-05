@@ -1,6 +1,12 @@
 ---
 title: "Wind_load_analysis"
 author: "Larz von Huene and Naomi Lubkin"
+date: "5/1/2023"
+output: html_document
+---
+---
+title: "Wind_load_analysis"
+author: "Larz von Huene and Naomi Lubkin"
 date: "2023-05-01"
 output: html_document
 ---
@@ -13,18 +19,195 @@ The drag coefficient was obtained from a study by Gilllies et al. (2002) that lo
 library(tidyverse)
 library(lubridate)
 library(dplyr)
+library(ggplot2)
+library(readr)
 ```
 
 # Load Data
 ```{r}
+##loading in 
+wind_2022 <- read_csv("Data/2022_wind.csv")
+hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+
+
+
+##cleaning and merging
+#hourly wind data, 1941-2021
+hourly_wind_41on <- hourly_wind %>%
+  #separate(date, c("year", "month", "day", "hour")) %>% #separating dates and times
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date))  %>%
+   filter(year >= 1941) %>%
+    mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#hourly wind data, 2022
+hourly_wind_22 <- wind_2022 %>%
+  separate(date, into = c("date", "time"), sep = " ") %>%
+  mutate(date = as.Date(date),
+          month=month(date),
+          year = year(date)) %>%
+  select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
+  mutate(year=as.numeric(year), 
+         month=as.numeric(month), 
+         wind_speed=as.numeric(wind_speed))
+
+#merging : dataframe with 1941-2022 hourly wind averages
+hourly_wind <- rbind(hourly_wind_41on, hourly_wind_22)
+
+
+#calculating wind speed in m/s from mph (1 mph = 0.44704 m/s)
+hourly_wind <- hourly_wind %>%
+  mutate(wind_ms = wind_speed * 0.44704) %>%
+  rename(wind_mph = wind_speed) %>%
+  mutate(homogenized_mph = ifelse(year <=1981, wind_mph*1.05, wind_mph), 
+         homogenized_ms = ifelse(year <=1981, wind_ms*1.05, wind_ms))
 
 ```
 
 # Calculate Wind Load 
 Equation: Force = Area x Wind Pressure x Drag Coefficient
-Wind Pressure = 0.00256 x (Wind Speed)^2
+- Wind Pressure = 0.00256 x (Wind Speed)^2
+- Drag coefficient used is 0.39, from Gillies et al. 2002 (found the drag coefficient for Colorado Spruce was 0.39)
+- Starting out using an area of 0.25 m^2 (0.5m x 0.5m). This may be adjusted later. 
+- Use wind speed in meters/second, not miles/hour
+
+Equation: Force (wind load) = 0.25 m^2 x 0.00256 x (wind speed)^2 x 0.39
 ```{r}
+#calculating wind load
+wind_load_data <- hourly_wind %>%
+  mutate(wind_load = 0.25 * 0.00256 * 0.39 * homogenized_ms^2)
+```
+
+#getting annual and seasonal wind loads
+```{r}
+#annual averages
+wind_load_annual <- wind_load_data %>%
+  na.omit() %>%
+  group_by(year) %>%
+  summarize(wind_load = mean(wind_load),  #averaging hourly wind speeds by day
+            .groups = "drop")
+
+
+#seasonal averages
+#first, daily averages from hourly so seasonal code works
+wl_daily <- wind_load_data %>%
+  na.omit() %>%
+   group_by(date) %>%
+  summarize(wind_load = mean(wind_load),  #averaging hourly wind speeds by day
+            .groups = "drop") %>%
+  mutate(month=month(date), #adding month column
+         month= as.numeric(month), #making sure month is numeric
+        year = year(date),  #adding year column
+         year=as.numeric(year),  #making sure year is numeric
+         wind_load=as.numeric(wind_load)) #making sure wind load is numeric
+
+
+wind_load_seasonal<- wl_daily %>%
+  mutate(year_for_season =  case_when(month == 12 ~ year + 1, TRUE ~ year)) %>%
+  mutate(season = case_when(month == 12 ~ "Winter", 
+                            month == 1 ~ "Winter", 
+                            month == 2 ~ "Winter", 
+                            month == 3 ~ "Spring", 
+                            month == 4 ~ "Spring",
+                            month == 5 ~ "Spring",
+                            month == 6 ~ "Summer",
+                            month == 7 ~ "Summer",
+                            month == 8 ~ "Summer",
+                            month == 9 ~ "Fall",
+                            month == 10 ~ "Fall",
+                            month == 11 ~ "Fall")) %>%
+  mutate(year_for_season  = as.character(year_for_season), 
+     season_and_year = paste(season, year_for_season, sep="-")) %>%
+   group_by(season_and_year) %>%
+   summarize(sum_wind = sum(wind_load), 
+            .groups = "drop") %>%
+   separate(season_and_year, into = c("season", "year"), sep = "-") %>%
+   mutate(year = as.numeric(year)) %>%
+    mutate(season_and_leapstatus = case_when(season == "Winter" & year == 1944 ~ "winter_leap",
+                                             season == "Winter" & year == 1948 ~ "winter_leap",
+                                             season == "Winter" & year == 1952 ~ "winter_leap",
+                                             season == "Winter" & year == 1956 ~ "winter_leap",
+                                             season == "Winter" & year == 1960 ~ "winter_leap",
+                                             season == "Winter" & year == 1964 ~ "winter_leap",
+                                             season == "Winter" & year == 1968 ~ "winter_leap",
+                                             season == "Winter" & year == 1972 ~ "winter_leap",
+                                             season == "Winter" & year == 1976 ~ "winter_leap",
+                                             season == "Winter" & year == 1980 ~ "winter_leap",
+                                             season == "Winter" & year == 1984 ~ "winter_leap",
+                                             season == "Winter" & year == 1988 ~ "winter_leap",
+                                             season == "Winter" & year == 1992 ~ "winter_leap",
+                                             season == "Winter" & year == 1996 ~ "winter_leap",
+                                             season == "Winter" & year == 2000 ~ "winter_leap",
+                                             season == "Winter" & year == 2004 ~ "winter_leap",
+                                             season == "Winter" & year == 2008 ~ "winter_leap",
+                                             season == "Winter" & year == 2012 ~ "winter_leap",
+                                             season == "Winter" & year == 2016 ~ "winter_leap",
+                                             season == "Winter" & year == 2020 ~ "winter_leap",
+                                             TRUE ~ season)) %>%
+    mutate(monthly_avg_wl = case_when(season == "Winter" ~ sum_wind/90,
+                         season == "winter_leap" ~ sum_wind/91, 
+                         season == "Spring" ~ sum_wind/92,
+                         season == "Summer" ~ sum_wind/92,
+                         season == "Fall" ~ sum_wind/91)) %>%
+  mutate(wl_homogenized =  ifelse(year <=1981, monthly_avg_wl*1.05, monthly_avg_wl))
+wind_load_seasonal$season <- factor(wind_load_seasonal$season, levels=c("Winter", "Spring", "Summer", "Fall", "winter_leap"))
+
 
 ```
 
+# Wind Load Figures 
+```{r}
+#wind load through time: this is with homogenized wind speeds
+wl_annual_plot <- ggplot(data = wind_load_annual, aes(x = year, y = wind_load)) + 
+  geom_point() +
+  labs(x="Year",y="Wind Load") +
+  theme_classic() +
+  stat_smooth(method = "lm")
+
+#seasonal wind load
+wl_seasonal_plot <- ggplot(data = wind_load_seasonal, aes(x=year, y=wl_homogenized)) +
+  geom_point()+
+  facet_wrap(~season) +
+  theme_classic()+
+  labs(x="Year", y="Wind Load")
+```
+
+#wind load stats
+```{r}
+#linear model 
+#hourly wind load data, homogenized
+wl.lm <- lm(wind_load ~ year, wind_load_data)
+summary(wl.lm) #significant value, but very low r^2 and estimate # (statistically significant, probably not biologically)
+
+#seasonal wind data, homogenized
+#making dataframes for linear model
+wl_winter <- wind_load_seasonal %>% #winter dataframe
+  filter(season=="Winter")
+
+wl_spring <- wind_load_seasonal %>% #spring dataframe
+  filter(season=="Spring")
+
+wl_summer <- wind_load_seasonal %>% #summer dataframe
+  filter(season=="Summer")
+
+wl_fall <- wind_load_seasonal %>% #fall dataframe
+  filter(season=="Fall")
+
+#linear model
+wl.winter.lm <- lm(wl_homogenized ~ year, wl_winter) #winter (DJF)
+summary(wl.winter.lm) #not significant
+
+wl.spring.lm <- lm(wl_homogenized ~ year, wl_spring) #spring (MAM)
+summary(wl.spring.lm) #not significant
+
+wl.summer.lm <- lm(wl_homogenized ~ year, wl_summer) #summer (JJA)
+summary(wl.summer.lm) #not significant
+
+wl.fall.lm <- lm(wl_homogenized ~ year, wl_fall) #fall (SON)
+summary(wl.fall.lm) #not significant
+```
 
