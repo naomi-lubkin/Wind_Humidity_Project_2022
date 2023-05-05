@@ -741,13 +741,58 @@ ff_annual <- season_rh %>%
   filter(Class == "Fog")
 
 # visual
-ggplot(ff_annual, aes(x= year, y = ff)) + geom_point() + geom_smooth(method = "lm", se = F)
+ggplot(ff_annual, aes(x= year, y = ff)) + geom_point() + geom_smooth(method = "sen", se = F)
 
 ff_sen <- sens.slope(ff_annual$ff, conf.level = 0.95)
 View(ff_sen)
 
 
 # seasonal
+ff_seasonal <- season_rh %>% 
+  group_by(Class, year, season) %>% 
+  summarise(n_class = n()) %>% 
+  group_by(year, season) %>% 
+  mutate(n_total = sum(n_class)) %>% 
+  group_by(Class, year, season) %>% 
+  summarise(ff = n_class/n_total, Class = Class) %>% 
+  filter(Class == "Fog")
+
+
+
+
+ff_annual_trend <- ff_annual %>% 
+  group_by(year) %>% 
+  summarize(annual_trend = sens.slope(ff_annual$ff, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(ff_annual$ff, conf.level = 0.95)[["p.value"]]) 
+  
+
+ff_seasonal_trend <- ff_seasonal %>% 
+  group_by(year, season) %>% 
+  summarise(avg_ff = mean(ff)) %>% 
+  group_by(season) %>% 
+  summarize(annual_trend = sens.slope(avg_ff, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(avg_ff, conf.level = 0.95)[["p.value"]]) 
+
+
+# combining for table
+ff_annual_trends_all <- bind_rows(ff_annual_trend, ff_seasonal_trend)  %>% 
+  mutate(decadal_trend = annual_trend*100) %>% #switches trend to decadal percentage
+  mutate(" " = ifelse(is.na(season), "Annual", season), 
+         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
+         "Decadal trend (%)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "p-value" = p) %>% 
+  dplyr::select(" ", "Decadal trend (%)") %>% 
+  distinct() %>%   # removes rows with repeat values
+  as.data.frame(html_table()) 
+
+
+ff_table <- ff_annual_trends_all %>% 
+  kbl(caption = "Decadal Trends of Fog Frequency from 1935-2022") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual fog frequency trends")) %>% 
+  kable_classic(full_width = F, html_font = "Cambria")  
+
+save_kable(ff_table, file = "Figures/ff_table.pdf")
+
 ```
 
 
@@ -805,13 +850,13 @@ annual_season_clear <- season_rh %>%
 #combine tables into one and make it look nice
 annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_season_clear)  %>% 
   mutate(Type = type, 
+         decadal_trend = annual_trend*10,
          " " = ifelse(is.na(season), "Annual", season), 
-         annual_trend = format(round(annual_trend, 3), nsmall = 3), # round trend to 3 decimal places
-         "Annual trend" = ifelse(p <= 0.05, str_c(annual_trend, "*"), annual_trend), # add asterisks
+         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
+         "Decadal trend" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
          "p-value" = p) %>% 
-  dplyr::select(" ", "Annual trend") %>% 
+  dplyr::select(" ", "Decadal trend") %>% 
   distinct() %>%   # removes rows with repeat values
-  
   as.data.frame(html_table()) 
   # add mean RH? for 1941 and for 2022
 
@@ -821,7 +866,7 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
 
 
 rh_table <- annual_trends_all %>%
-  kbl(caption = "Annual Trends of Relative Humidity from 1935-2022") %>%
+  kbl(caption = "Decadal Trends of Relative Humidity from 1935-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>% 
   group_rows(group_label = "All", start_row = 1, end_row = 5, hline_after = T) %>% 
@@ -843,7 +888,6 @@ season_rh %>%
     #geom_histogram(bins = 100) + 
     geom_density(alpha = 0.1) 
     #scale_fill_continuous(type = "gradient")
-
 
 
 season_rh %>% 
