@@ -12,7 +12,7 @@ output: html_document
 ---
 
 This rmd calculates wind load and analyzes trends over the years.
-The drag coefficient was obtained from a study by Gilllies et al. (2002) that looked at three different plant species. For this analysis we used their drag coefficient of a Colorado Spruce.
+The drag coefficient was obtained from a study by Gillies et al. (2002) that looked at three different plant species. For this analysis we used their drag coefficient of a Colorado Spruce.
 
 # Packages
 ```{r}
@@ -24,7 +24,7 @@ library(readr)
 ```
 
 # Load Data
-```{r}
+```{r, message=FALSE}
 ##loading in 
 wind_2022 <- read_csv("Data/2022_wind.csv")
 hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
@@ -50,7 +50,7 @@ hourly_wind_22 <- wind_2022 %>%
   mutate(date = as.Date(date),
           month=month(date),
           year = year(date)) %>%
-  select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
+  dplyr::select(date, time, wind_speed, month, year) %>% #same columns as 1941 data for merge
   mutate(year=as.numeric(year), 
          month=as.numeric(month), 
          wind_speed=as.numeric(wind_speed))
