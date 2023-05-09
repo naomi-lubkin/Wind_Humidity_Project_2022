@@ -21,6 +21,7 @@ library(lubridate)
 library(dplyr)
 library(ggplot2)
 library(readr)
+library(patchwork)
 ```
 
 # Load Data
@@ -76,10 +77,14 @@ Equation: Force = Area x Wind Pressure x Drag Coefficient
 - Use wind speed in meters/second, not miles/hour
 
 Equation: Force (wind load) = 0.25 m^2 x 0.00256 x (wind speed)^2 x 0.39
+(also tried it with 1m^2 area; shape of plot is no different)
+
 ```{r}
 #calculating wind load
 wind_load_data <- hourly_wind %>%
   mutate(wind_load = 0.25 * 0.00256 * 0.39 * homogenized_ms^2)
+
+
 ```
 
 #getting annual and seasonal wind loads
@@ -159,21 +164,30 @@ wind_load_seasonal$season <- factor(wind_load_seasonal$season, levels=c("Winter"
 
 ```
 
+
+
 # Wind Load Figures 
 ```{r}
 #wind load through time: this is with homogenized wind speeds
+pdf(file = "Figures/annual_wind_load.pdf", width = 8, height = 5)
 wl_annual_plot <- ggplot(data = wind_load_annual, aes(x = year, y = wind_load)) + 
   geom_point() +
   labs(x="Year",y="Wind Load") +
   theme_classic() +
-  stat_smooth(method = "lm")
+  stat_smooth(method = "lm", se = FALSE)
+dev.off()
 
 #seasonal wind load
+pdf(file = "Figures/seasonal_wind_load.pdf", width = 8, height = 5)
 wl_seasonal_plot <- ggplot(data = wind_load_seasonal, aes(x=year, y=wl_homogenized)) +
   geom_point()+
   facet_wrap(~season) +
   theme_classic()+
   labs(x="Year", y="Wind Load")
+dev.off()
+
+
+
 ```
 
 #wind load stats
@@ -210,4 +224,3 @@ summary(wl.summer.lm) #not significant
 wl.fall.lm <- lm(wl_homogenized ~ year, wl_fall) #fall (SON)
 summary(wl.fall.lm) #not significant
 ```
-
