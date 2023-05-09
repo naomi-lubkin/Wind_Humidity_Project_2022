@@ -198,7 +198,7 @@ plot(decomp81)
 #monthly average wind speed by season  
 monthlyavg_season_plot <- ggplot(seasonal_winds, aes (x = year, y=monthly_avg_spd, colour = season)) + 
   geom_point() +
-  geom_smooth(se=FALSE, method = 'loess')+
+  geom_smooth(se=FALSE, method = 'lm')+
   labs( x = 'Year', y = 'Wind Speed (mph)') + 
   ggtitle("MWO Annual Wind Averages by Season") +
   theme_minimal() +

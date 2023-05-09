@@ -272,5 +272,40 @@ annual_avg_plot
 dev.off()
 ```
 
+# Trend table
+```{r}
+#annual
+annual_trend <- yearly_avg %>% 
+  filter(year >= 1981) %>% 
+  summarize(season = "Annual",
+            annual_trend = sens.slope(yearly_avg$homogenized_wind, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(yearly_avg$homogenized_wind, conf.level = 0.95)[["p.value"]]) 
+
+seasonal_trends <- rbind(spring, summer, fall, winter)  
+seasonal_trends <- seasonal_trends %>% 
+  filter(year>=1981) %>%  
+  group_by(season) %>% 
+  summarize(annual_trend = sens.slope(homogenized_wind, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(homogenized_wind, conf.level = 0.95)[["p.value"]])
+
+
+trends_all <- rbind(annual_trend, seasonal_trends) %>% 
+  mutate(decadal_trend = annual_trend*10,
+         " " = ifelse(is.na(season), "Annual", season), 
+         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
+         "Decadal trend" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "p-value" = p) %>% 
+  dplyr::select(" ", "Decadal trend")
+
+
+wind_table <- trends_all %>% 
+  kbl(caption = "Decadal Trends of Wind Speeds from 1935-2022") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind speed trends")) %>%   kable_classic(full_width = F, html_font = "Cambria")  
+
+save_kable(wind_table, file = "Figures/wind_table.pdf")
+
+
+```
+
 
 

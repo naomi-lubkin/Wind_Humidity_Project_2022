@@ -776,7 +776,7 @@ ff_seasonal_trend <- ff_seasonal %>%
 
 # combining for table
 ff_annual_trends_all <- bind_rows(ff_annual_trend, ff_seasonal_trend)  %>% 
-  mutate(decadal_trend = annual_trend*100) %>% #switches trend to decadal percentage
+  mutate(decadal_trend = annual_trend*10*100) %>% #switches trend to decadal percentage
   mutate(" " = ifelse(is.na(season), "Annual", season), 
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Decadal trend (%)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks

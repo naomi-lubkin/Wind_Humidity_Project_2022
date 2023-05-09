@@ -1777,3 +1777,24 @@ allmonths_100  + plot_annotation(title='Fog, Freezing, and above 100 mph wind ho
 
 ```
 
+
+# Events proportion plot
+```{r}
+counts_final25 <- counts_final25 %>% 
+  mutate(threshold = "25mph") 
+counts_final60 <- counts_final60 %>% 
+  mutate(threshold = "60mph")
+counts_final100 <- counts_final100 %>% 
+  mutate(threshold = "100mph")
+
+counts <- rbind(counts_final25, counts_final60, counts_final100) %>% 
+  mutate(threshold = factor(threshold, levels = c("100mph", "60mph", "25mph")))
+
+counts <- counts %>% 
+  group_by(threshold, year) %>% 
+  summarize(counts = mean(count_events))
+  
+ggplot(counts, aes(fill=threshold, y=counts, x=year)) +
+geom_bar(position="stack", stat="identity")
+```
+
