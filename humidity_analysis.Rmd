@@ -115,10 +115,10 @@ rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice)
 
 # count how many negative values in "rh"
 nrow(rh[rh$RH<0,])
-  # 73 negative out of 70,874 rows
+  # 73 negative out of 121,618 rows
 
 # percent with negative RH in "rh"
-73/70874 # 0.1%
+73/121618  # 0.06%
 
 # filter out negative rh
 rh <- rh %>% 
@@ -666,7 +666,7 @@ dev.off()
 ```{r}
 # adding fog and clear class
 season_rh <- season_rh %>% 
-  mutate(Class = ifelse(dry_bulb == wet_bulb, "Fog", "Clear")) %>% 
+  mutate(Class = ifelse(RH < 96, "Fog", "Clear")) %>% 
   dplyr::select(date, RH, year, month, year_for_winter, season, Class)
 
 # filter for clear 
