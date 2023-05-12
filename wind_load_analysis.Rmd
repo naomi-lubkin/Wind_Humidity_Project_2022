@@ -84,19 +84,10 @@ Equation: Force (wind load) = 0.25 m^2 x 0.00256 x (wind speed)^2 x 0.39
 wind_load_data <- hourly_wind %>%
   mutate(wind_load = 0.25 * 0.00256 * 0.39 * homogenized_ms^2)
 
-
 ```
 
-#getting annual and seasonal wind loads
+#getting seasonal and annual wind loads
 ```{r}
-#annual averages
-wind_load_annual <- wind_load_data %>%
-  na.omit() %>%
-  group_by(year) %>%
-  summarize(wind_load = mean(wind_load),  #averaging hourly wind speeds by day
-            .groups = "drop")
-
-
 #seasonal averages
 #first, daily averages from hourly so seasonal code works
 wl_daily <- wind_load_data %>%
@@ -125,42 +116,56 @@ wind_load_seasonal<- wl_daily %>%
                             month == 9 ~ "Fall",
                             month == 10 ~ "Fall",
                             month == 11 ~ "Fall")) %>%
-  mutate(year_for_season  = as.character(year_for_season), 
-     season_and_year = paste(season, year_for_season, sep="-")) %>%
-   group_by(season_and_year) %>%
-   summarize(sum_wind = sum(wind_load), 
-            .groups = "drop") %>%
-   separate(season_and_year, into = c("season", "year"), sep = "-") %>%
-   mutate(year = as.numeric(year)) %>%
-    mutate(season_and_leapstatus = case_when(season == "Winter" & year == 1944 ~ "winter_leap",
-                                             season == "Winter" & year == 1948 ~ "winter_leap",
-                                             season == "Winter" & year == 1952 ~ "winter_leap",
-                                             season == "Winter" & year == 1956 ~ "winter_leap",
-                                             season == "Winter" & year == 1960 ~ "winter_leap",
-                                             season == "Winter" & year == 1964 ~ "winter_leap",
-                                             season == "Winter" & year == 1968 ~ "winter_leap",
-                                             season == "Winter" & year == 1972 ~ "winter_leap",
-                                             season == "Winter" & year == 1976 ~ "winter_leap",
-                                             season == "Winter" & year == 1980 ~ "winter_leap",
-                                             season == "Winter" & year == 1984 ~ "winter_leap",
-                                             season == "Winter" & year == 1988 ~ "winter_leap",
-                                             season == "Winter" & year == 1992 ~ "winter_leap",
-                                             season == "Winter" & year == 1996 ~ "winter_leap",
-                                             season == "Winter" & year == 2000 ~ "winter_leap",
-                                             season == "Winter" & year == 2004 ~ "winter_leap",
-                                             season == "Winter" & year == 2008 ~ "winter_leap",
-                                             season == "Winter" & year == 2012 ~ "winter_leap",
-                                             season == "Winter" & year == 2016 ~ "winter_leap",
-                                             season == "Winter" & year == 2020 ~ "winter_leap",
-                                             TRUE ~ season)) %>%
-    mutate(monthly_avg_wl = case_when(season == "Winter" ~ sum_wind/90,
-                         season == "winter_leap" ~ sum_wind/91, 
-                         season == "Spring" ~ sum_wind/92,
-                         season == "Summer" ~ sum_wind/92,
-                         season == "Fall" ~ sum_wind/91)) %>%
-  mutate(wl_homogenized =  ifelse(year <=1981, monthly_avg_wl*1.05, monthly_avg_wl))
-wind_load_seasonal$season <- factor(wind_load_seasonal$season, levels=c("Winter", "Spring", "Summer", "Fall", "winter_leap"))
+   group_by(year, season) %>%
+  summarise(seasonal_avg_wl = mean(wind_load)) 
+  
+  
+# ANOTHER WAY TO DO ABOVE COMMAND, but slightly off because of days with "na" windloads (eg there are not always 92 days of data in spring)
+#   summarize(sum_wind = sum(wind_load), 
+#             .groups = "drop") %>%
+#    separate(season_and_year, into = c("season", "year"), sep = "-") %>%
+#    mutate(year = as.numeric(year)) %>%
+#     mutate(season_and_leapstatus = case_when(season == "Winter" & year == 1944 ~ "winter_leap",
+#                                              season == "Winter" & year == 1948 ~ "winter_leap",
+#                                              season == "Winter" & year == 1952 ~ "winter_leap",
+#                                              season == "Winter" & year == 1956 ~ "winter_leap",
+#                                              season == "Winter" & year == 1960 ~ "winter_leap",
+#                                              season == "Winter" & year == 1964 ~ "winter_leap",
+#                                              season == "Winter" & year == 1968 ~ "winter_leap",
+#                                              season == "Winter" & year == 1972 ~ "winter_leap",
+#                                              season == "Winter" & year == 1976 ~ "winter_leap",
+#                                              season == "Winter" & year == 1980 ~ "winter_leap",
+#                                              season == "Winter" & year == 1984 ~ "winter_leap",
+#                                              season == "Winter" & year == 1988 ~ "winter_leap",
+#                                              season == "Winter" & year == 1992 ~ "winter_leap",
+#                                              season == "Winter" & year == 1996 ~ "winter_leap",
+#                                              season == "Winter" & year == 2000 ~ "winter_leap",
+#                                              season == "Winter" & year == 2004 ~ "winter_leap",
+#                                              season == "Winter" & year == 2008 ~ "winter_leap",
+#                                              season == "Winter" & year == 2012 ~ "winter_leap",
+#                                              season == "Winter" & year == 2016 ~ "winter_leap",
+#                                              season == "Winter" & year == 2020 ~ "winter_leap",
+#                                              TRUE ~ season)) %>%
+#     mutate(seasonal_avg_wl = case_when(season == "Winter" ~ sum_wind/90,
+#                          season == "winter_leap" ~ sum_wind/91, 
+#                          season == "Spring" ~ sum_wind/92,
+#                          season == "Summer" ~ sum_wind/92,
+#                          season == "Fall" ~ sum_wind/91)) %>%
+#   mutate(wl_homogenized =  ifelse(year <=1981, seasonal_avg_wl*1.05, seasonal_avg_wl))
+# wind_load_seasonal$season <- factor(wind_load_seasonal$season, levels=c("Winter", "Spring", "Summer", "Fall", "winter_leap"))
 
+ 
+
+#monthly averages
+wind_load_monthly <- wl_daily %>%
+  na.omit() %>%
+  group_by(year, month) %>%
+  summarize(wind_load = mean(wind_load)) 
+
+#annual averages
+wind_load_annual <- wind_load_monthly%>% 
+  group_by(year) %>% 
+  summarize(wind_load = mean(wind_load))
 
 ```
 
@@ -179,7 +184,7 @@ dev.off()
 
 #seasonal wind load
 pdf(file = "Figures/seasonal_wind_load.pdf", width = 8, height = 5)
-wl_seasonal_plot <- ggplot(data = wind_load_seasonal, aes(x=year, y=wl_homogenized)) +
+wl_seasonal_plot <- ggplot(data = wind_load_seasonal, aes(x=year, y=seasonal_avg_wl)) +
   geom_point()+
   facet_wrap(~season) +
   theme_classic()+
@@ -212,15 +217,15 @@ wl_fall <- wind_load_seasonal %>% #fall dataframe
   filter(season=="Fall")
 
 #linear model
-wl.winter.lm <- lm(wl_homogenized ~ year, wl_winter) #winter (DJF)
+wl.winter.lm <- lm(seasonal_avg_wl ~ year, wl_winter) #winter (DJF)
 summary(wl.winter.lm) #not significant
 
-wl.spring.lm <- lm(wl_homogenized ~ year, wl_spring) #spring (MAM)
+wl.spring.lm <- lm(seasonal_avg_wl ~ year, wl_spring) #spring (MAM)
 summary(wl.spring.lm) #not significant
 
-wl.summer.lm <- lm(wl_homogenized ~ year, wl_summer) #summer (JJA)
+wl.summer.lm <- lm(seasonal_avg_wl ~ year, wl_summer) #summer (JJA)
 summary(wl.summer.lm) #not significant
 
-wl.fall.lm <- lm(wl_homogenized ~ year, wl_fall) #fall (SON)
+wl.fall.lm <- lm(seasonal_avg_wl ~ year, wl_fall) #fall (SON)
 summary(wl.fall.lm) #not significant
 ```
