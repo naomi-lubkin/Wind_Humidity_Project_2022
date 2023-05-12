@@ -299,7 +299,7 @@ trends_all <- rbind(annual_trend, seasonal_trends) %>%
 
 
 wind_table <- trends_all %>% 
-  kbl(caption = "Decadal Trends of Wind Speeds from 1935-2022") %>%
+  kbl(caption = "Decadal Trends of Wind Speeds from 1981-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind speed trends")) %>%   kable_classic(full_width = F, html_font = "Cambria")  
 
 save_kable(wind_table, file = "Figures/wind_table.pdf")
