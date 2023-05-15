@@ -133,22 +133,21 @@ winter.sen <- sens.slope(winter_avg_t$seasonal_avg)
 
 # Trends table
 ```{r}
-## Overall data
+## Annual trends
 
-# calculate annual trends
 annual_trends <- yearly_avg_t %>% 
   mutate(season = 'Annual') %>% 
   summarize(annual_trend = sens.slope(yearly_avg, conf.level = 0.95)[["estimates"]],
             p = sens.slope(yearly_avg, conf.level = 0.95)[["p.value"]]) 
 
-
-## Seasonal
+## Seasonal trends
 
 seasonal_trends <- seasonal_avg_t %>%
   group_by(season) %>%
   summarize(annual_trend = sens.slope(seasonal_avg, conf.level = 0.95)[["estimates"]],
             p = sens.slope(seasonal_avg, conf.level = 0.95)[["p.value"]])
 
+## Combining to make table
 
 annual_trends_all <- bind_rows(annual_trends, seasonal_trends)  %>%
   mutate(decadal_trend = annual_trend*10,
@@ -166,7 +165,6 @@ temp_table <- annual_trends_all %>%
   kable_classic(full_width = F, html_font = "Cambria") 
 
 save_kable(temp_table, file = "Figures/temperature_table.pdf")
-
 ```
 
 
