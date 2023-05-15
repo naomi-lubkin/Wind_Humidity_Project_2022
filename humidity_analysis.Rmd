@@ -53,8 +53,6 @@ synoptic <- synoptic %>%
   filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
   filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
   filter(dry_bulb-wet_bulb < 10)  # no gaps larger than 10 degrees between wet and dry)
-
-
 ```
 
 

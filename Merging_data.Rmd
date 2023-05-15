@@ -4,7 +4,7 @@ author: "Larz von Huene and Naomi Lubkin"
 date: '2022-07-02'
 output: html_document
 ---
-This rmd contains the bulk of the analysis for this project. 
+This rmd contains the damaging event analysis for this project. 
 
 There was analysis done with both the 1981-2021 data and 1941-2021 data (see "homogenization.rmd" for more details on how homogenization was done). It includes RH calculations again, and then plots counts of events with high RH, winds, and freezing temperatures. 
 
@@ -254,9 +254,8 @@ merged_data_41 <- merge(hourly_temp, merged_data_41, by = 'date')
 #and select relevant columns
 merged_data_41 <- merged_data_41 %>% 
   dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  homogenized_wind)
-
-
 ```
+
 
 #datasets for each wind threshold, 1941-2022
 ```{r}
