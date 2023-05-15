@@ -1,0 +1,172 @@
+---
+title: "Temperature Analysis"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-05-15"
+output: html_document
+---
+
+This markdown uses hourly temperature data to look for seasonal and annual trends. Temperature is in Fahrenheit.
+
+#Load Packages
+```{r}
+library(tidyverse)
+library(lubridate)
+library(trend)
+library(patchwork)
+library(kableExtra)
+```
+
+# Data
+```{r, message=FALSE}
+#temp data
+hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv") %>% 
+  mutate(temperature = as.numeric(temperature)) 
+temp_2022 <- read_csv("Data/2022_temp_hourly.csv")
+
+## Update to 2022
+#round up hour
+temp_2022 <- temp_2022 %>% 
+  mutate(time = round_date(temp_2022$time, unit = "hour"), temperature = f_temp, date = time) %>% 
+  dplyr::select(date, temperature) 
+
+hourly_temp <- hourly_temp %>% 
+  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"))
+
+hourly_temp <- rbind(hourly_temp, temp_2022)
+```
+
+
+# Averages
+```{r}
+# setting up the data
+hourly_temp <- hourly_temp %>% 
+  na.omit() %>% 
+  mutate(year = year(date), 
+         month = month(date), 
+         year = as.numeric(year), 
+         month = as.numeric(month),
+         season = case_when(
+           month == 12 ~ "Winter",
+           month == 1 ~ "Winter",
+           month == 2 ~ "Winter",
+           month == 3 ~ "Spring",
+           month == 4 ~ "Spring",
+           month == 5 ~ "Spring",
+           month == 6 ~ "Summer",
+           month == 7 ~ "Summer",
+           month == 8 ~ "Summer",
+           month == 9 ~ "Fall",
+           month == 10 ~ "Fall",
+           month == 11 ~ "Fall",
+           TRUE ~ NA_character_)) %>% 
+  filter(year >= 1941) # only doing post 1941 for analysis to compare with wind
+
+# Summarize daily averages
+daily_avg_t <- hourly_temp %>% 
+  group_by(date(date), month, year, season) %>% 
+  summarize(day_avg = mean(temperature))
+
+# Summarize monthly averages
+monthly_avg_t <- daily_avg_t %>% 
+  group_by(month, year, season) %>% 
+  summarize(month_avg = mean(day_avg))
+
+# Summarize seasonal averages
+seasonal_avg_t <- monthly_avg_t %>%
+   mutate(year_for_winter = ifelse(month == 12, year + 1, year)) %>% # this is to correct for month 12 being in previous year, so that winter can be grouped together 
+  group_by(season, year_for_winter) %>% 
+  summarize(seasonal_avg = mean(month_avg))
+
+# Summarize yearly averages
+yearly_avg_t <- monthly_avg_t %>% 
+  group_by(year) %>% 
+  summarize(yearly_avg = mean(month_avg))
+```
+# Analysis
+```{r}
+# annual: 1941 - 2022
+pdf(file = "Figures/temp_annual_1941.pdf", width = 8, height = 5)
+annual.sen <- sens.slope(yearly_avg_t$yearly_avg)
+ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  theme_minimal() +
+  ylim(20, 33) +
+  xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
+  labs(x = "Year", y = "Temperature °F") +
+  ggtitle("Average Temperatures 1941-2022") + 
+  annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
+
+# annual: 1981 - 2022
+pdf(file = "Figures/temp_annual_1981.pdf", width = 8, height = 5)
+yearly_avg_t_81 <-  yearly_avg_t %>% 
+  filter(year >= 1981) 
+annual.sen <- sens.slope(yearly_avg_t_81$yearly_avg)
+ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey") +
+  theme_minimal() +
+  ylim(20, 33) +
+  xlim(1981, 2022) +
+  labs(x = "Year", y = "Temperature °F") +
+  ggtitle("Average Temperatures 1981-2022") + 
+  annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+dev.off()
+
+# monthly: 1941 - 2022
+ggplot(monthly_avg_t, aes(x = year, y = month_avg)) + geom_point() + geom_smooth(method = "lm", se = F) + facet_wrap(~month)
+
+# seasonal: 1941 - 2022
+ggplot(seasonal_avg_t, aes(x = year_for_winter, y = seasonal_avg, color = season)) + geom_point() + geom_smooth(method = "lm", se = F)
+
+# winter
+winter_avg_t <- seasonal_avg_t %>% 
+  filter(season == "Winter") 
+
+ggplot(winter_avg_t, aes(year_for_winter, seasonal_avg)) + geom_point() + geom_smooth(method = "lm", se = F)
+
+winter.sen <- sens.slope(winter_avg_t$seasonal_avg)  
+```
+
+# Trends table
+```{r}
+## Overall data
+
+# calculate annual trends
+annual_trends <- yearly_avg_t %>% 
+  mutate(season = 'Annual') %>% 
+  summarize(annual_trend = sens.slope(yearly_avg, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(yearly_avg, conf.level = 0.95)[["p.value"]]) 
+
+
+## Seasonal
+
+seasonal_trends <- seasonal_avg_t %>%
+  group_by(season) %>%
+  summarize(annual_trend = sens.slope(seasonal_avg, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(seasonal_avg, conf.level = 0.95)[["p.value"]])
+
+
+annual_trends_all <- bind_rows(annual_trends, seasonal_trends)  %>%
+  mutate(decadal_trend = annual_trend*10,
+         " " = ifelse(is.na(season), "Annual", season),
+         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
+         "Decadal trend" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "p-value" = p) %>%
+  dplyr::select(" ", "Decadal trend") %>%
+  distinct() %>%   # removes rows with repeat values
+  as.data.frame(html_table())
+
+temp_table <- annual_trends_all %>%
+  kbl(caption = "Decadal Trends of Temperature (°F) from 1941-2022") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual temperature trends")) %>%
+  kable_classic(full_width = F, html_font = "Cambria") 
+
+save_kable(temp_table, file = "Figures/temperature_table.pdf")
+
+```
+
+
