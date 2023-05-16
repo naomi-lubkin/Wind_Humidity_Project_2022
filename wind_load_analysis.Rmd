@@ -4,12 +4,6 @@ author: "Larz von Huene and Naomi Lubkin"
 date: "5/1/2023"
 output: html_document
 ---
----
-title: "Wind_load_analysis"
-author: "Larz von Huene and Naomi Lubkin"
-date: "2023-05-01"
-output: html_document
----
 
 This rmd calculates wind load and analyzes trends over the years.
 The drag coefficient was obtained from a study by Gillies et al. (2002) that looked at three different plant species. For this analysis we used their drag coefficient of a Colorado Spruce.

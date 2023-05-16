@@ -117,7 +117,10 @@ rh <- rh %>%
 
 
 # Export dataset 
-write.csv(rh, file = "Data/rh_from_humidity_analysis_rmd.csv")
+write.csv(rh, file = "Data/rh_from_umidity_analysis_rmd.csv")
+
+rh <- rh %>% 
+  filter(year >= 1941)
 ```
 
 
@@ -725,11 +728,12 @@ clear.sen[["conf.int"]]
 
 # clear vs all visual
 pdf(file = "Figures/rh_plot_by_class.pdf", width = 8, height = 5)
+rbind
 ggplot(year_rh, aes(x = year, y = avg_rh)) + 
   geom_line(data = year_rh, aes(x = year, y = avg_rh), color = "grey50") + geom_smooth(data = year_rh, aes(x = year, y = avg_rh), method = "lm", se = F, color = "grey70", size = 0.5) + 
   geom_line(data = clear_summary, aes(x = year, y = avg_rh), color = "skyblue3", lty = "longdash") + geom_smooth(data = clear_summary, aes(x = year, y = avg_rh), method = "lm", se = F, color = "skyblue2", size = 0.5) +
-  theme_minimal() +
-  labs(title = "Average Relative Humidity 1935-2022", x = "Year", y = "Relative Humidity (%)")
+  theme_minimal() + 
+  labs(x = "Year", y = "Relative Humidity (%)", title = "Relative humidity overall and in the clear", subtitle = "1941-2022" )
 dev.off()
 ```
 
