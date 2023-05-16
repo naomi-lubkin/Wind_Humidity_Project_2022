@@ -120,41 +120,6 @@ wind_load_seasonal<- wl_daily %>%
   summarise(seasonal_avg_wl = mean(wind_load)) 
   
   
-# ANOTHER WAY TO DO ABOVE COMMAND, but slightly off because of days with "na" windloads (eg there are not always 92 days of data in spring)
-#   summarize(sum_wind = sum(wind_load), 
-#             .groups = "drop") %>%
-#    separate(season_and_year, into = c("season", "year"), sep = "-") %>%
-#    mutate(year = as.numeric(year)) %>%
-#     mutate(season_and_leapstatus = case_when(season == "Winter" & year == 1944 ~ "winter_leap",
-#                                              season == "Winter" & year == 1948 ~ "winter_leap",
-#                                              season == "Winter" & year == 1952 ~ "winter_leap",
-#                                              season == "Winter" & year == 1956 ~ "winter_leap",
-#                                              season == "Winter" & year == 1960 ~ "winter_leap",
-#                                              season == "Winter" & year == 1964 ~ "winter_leap",
-#                                              season == "Winter" & year == 1968 ~ "winter_leap",
-#                                              season == "Winter" & year == 1972 ~ "winter_leap",
-#                                              season == "Winter" & year == 1976 ~ "winter_leap",
-#                                              season == "Winter" & year == 1980 ~ "winter_leap",
-#                                              season == "Winter" & year == 1984 ~ "winter_leap",
-#                                              season == "Winter" & year == 1988 ~ "winter_leap",
-#                                              season == "Winter" & year == 1992 ~ "winter_leap",
-#                                              season == "Winter" & year == 1996 ~ "winter_leap",
-#                                              season == "Winter" & year == 2000 ~ "winter_leap",
-#                                              season == "Winter" & year == 2004 ~ "winter_leap",
-#                                              season == "Winter" & year == 2008 ~ "winter_leap",
-#                                              season == "Winter" & year == 2012 ~ "winter_leap",
-#                                              season == "Winter" & year == 2016 ~ "winter_leap",
-#                                              season == "Winter" & year == 2020 ~ "winter_leap",
-#                                              TRUE ~ season)) %>%
-#     mutate(seasonal_avg_wl = case_when(season == "Winter" ~ sum_wind/90,
-#                          season == "winter_leap" ~ sum_wind/91, 
-#                          season == "Spring" ~ sum_wind/92,
-#                          season == "Summer" ~ sum_wind/92,
-#                          season == "Fall" ~ sum_wind/91)) %>%
-#   mutate(wl_homogenized =  ifelse(year <=1981, seasonal_avg_wl*1.05, seasonal_avg_wl))
-# wind_load_seasonal$season <- factor(wind_load_seasonal$season, levels=c("Winter", "Spring", "Summer", "Fall", "winter_leap"))
-
- 
 
 #monthly averages
 wind_load_monthly <- wl_daily %>%

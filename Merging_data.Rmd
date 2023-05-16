@@ -29,51 +29,21 @@ library(pscl) #for hurdle model
 #pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 #wind data
-hourly_wind_raw <- read_csv("Data/b16-hourly wind 1935-2021.csv")
-wind_2022 <- read_csv("Data/2022_wind.csv")
+hourly_wind <- read_csv("Data/wind_from_wind_1941_2022_rmd.csv") 
 
 #temp data
 hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv") %>% 
+  
   mutate(temperature = as.numeric(temperature)) 
 temp_2022 <- read_csv("Data/2022_temp_hourly.csv")
 
 #rh data
-synoptic <- read_csv("Data/b16 synoptic data 1935-2021.csv") %>% 
-  dplyr::select(-c(precipitation, precipitation_trace))
-
-bulb <- read_csv("Data/2022_synoptic_wet_dry_bulb.csv") %>% 
-  mutate(date = as.POSIXct(date, format = "%m/%d/%Y %H:%M", tz = "ETC"))
-pressure <- read_csv("Data/2022_RH_pressure.csv")
+rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") 
 
 ```
 
 # Update to add 2022 data (doesn't include weather codes)
 ```{r}
-## WIND
-
-#hourly wind data, 1941-2021
-hourly_wind_41on <- hourly_wind_raw %>% 
-   filter(year(date) >= 1941) 
-
-#hourly wind data, 2022
-hourly_wind_22 <- wind_2022 %>% 
-  dplyr::select(date, wind_speed) #same columns as 1941 data for merge
-
-#merging : dataframe with 1941-2022 hourly wind averages
-hourly_wind <- rbind(hourly_wind_41on, hourly_wind_22)
-
-
-
-
-## RH
-
-synoptic_2022 <- full_join(bulb, pressure, by = "date") %>% 
-  dplyr::select(-relative_humidity)  # takes out rh measurement from observatory so we can calculate all rh the same way 
-  
-synoptic <- rbind(synoptic, synoptic_2022) # adding 2022
-
-
-
 
 ## TEMP
 
@@ -89,95 +59,6 @@ hourly_temp <- rbind(hourly_temp, temp_2022)
 
 ```
 
-# Clean synoptic data
-```{r}
-synoptic <- synoptic %>% 
-  filter(wet_bulb != "NULL" &  pressure_mb != "NULL") %>%  # removes all null values (from wet_bulb, dry_bulb, and pressure_mb)
-  mutate(dry_bulb = as.numeric(dry_bulb), 
-         wet_bulb = as.numeric(wet_bulb), 
-         pressure_mb = as.numeric(pressure_mb)) %>% # switch from chr to dbl
-  mutate(dry_bulb = (dry_bulb-32)*(5/9),
-         wet_bulb = (wet_bulb-32)*(5/9)) %>% #convert temperature into °C
-  filter(wet_bulb <= dry_bulb) %>% # ensures that wet bulb is less than or equal to dry bulb for the sake of the RH equation
-  filter(dry_bulb-wet_bulb < 10)  # no gaps larger than 10 degrees between wet and dry)
-
-
-```
-
-# Calculate Relative Humidity 
-Calculations from WMO annex 4.B
-```{r}
-
-# split data into ice and water (based on Seidel's distinction)
-synoptic_rh_liquid <- synoptic %>% 
-  filter(wet_bulb >= 0) 
-synoptic_rh_ice <- synoptic %>% 
-  filter(wet_bulb < 0)
-
-## calculations for water
-# saturation vapor pressure
-f_p_water <- 1.0016+3.15*(10^-6)*(synoptic_rh_liquid$pressure_mb)-0.074/(synoptic_rh_liquid$pressure_mb)
-
-sat_vap_p_water_pure <- 6.112*(exp(17.62*(synoptic_rh_liquid$dry_bulb)/(243.12+(synoptic_rh_liquid$dry_bulb)))) # saturation vapor pressure for pure water
-sat_vap_p_water_moist <- f_p_water*sat_vap_p_water_pure  # saturation vapor pressure for moist water
-  
-# psychometric formulas for the Assmann psychrometer
-water_vap_p <- 6.112*(exp(17.62*(synoptic_rh_liquid$wet_bulb)/(243.12+(synoptic_rh_liquid$wet_bulb))))*f_p_water - 6.53*(10^-4)*(1+0.000944*(synoptic_rh_liquid$wet_bulb))*(synoptic_rh_liquid$pressure_mb)*(synoptic_rh_liquid$dry_bulb - synoptic_rh_liquid$wet_bulb)
-
-# Relative humidity
-rh_liquid <- 100*water_vap_p/sat_vap_p_water_moist
-
-# liquid tibble
-synoptic_rh_liquid <- synoptic_rh_liquid %>% 
-  mutate(RH = rh_liquid) 
-
-
-
-
-
-
-## calculations for ice
-
-synoptic_rh_ice <- synoptic %>% 
-  filter(wet_bulb < 0)
-
-f_p_ice <- 1.0016+(3.15*(10^-6))*(synoptic_rh_ice$pressure_mb)-0.074/synoptic_rh_ice$pressure_mb
-
-sat_vap_p_ice_pure_t <- 6.112*(exp(22.46*(synoptic_rh_ice$dry_bulb)/(272.62+(synoptic_rh_ice$dry_bulb))))
-sat_vap_p_ice_moist_t <- sat_vap_p_ice_pure_t*f_p_ice
-
-sat_vap_p_ice_pure_tw <- 6.112*(exp(22.46*(synoptic_rh_ice$wet_bulb)/(272.62+(synoptic_rh_ice$wet_bulb))))
-sat_vap_p_ice_moist_tw <- sat_vap_p_ice_pure_tw*f_p_ice
-
-ice_vap_p <- sat_vap_p_ice_pure_t - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
-
-frost_pt <- (272.62*(log(ice_vap_p/6.112*f_p_ice)))/(22.46-(log(ice_vap_p/6.112*f_p_ice)))
-
-sat_vap_p_from_frost <- 6.112*(exp(22.46*(frost_pt)/(272.62+(frost_pt))))
-vap_p_from_frost <- sat_vap_p_from_frost - 5.75*(10^-4)*(1+0.000944*(synoptic_rh_ice$wet_bulb))*(synoptic_rh_ice$pressure_mb)*(synoptic_rh_ice$dry_bulb - synoptic_rh_ice$wet_bulb)
-
-rh_ice <- 100*(vap_p_from_frost/sat_vap_p_from_frost)
-
-# ice tibble
-synoptic_rh_ice <- synoptic_rh_ice %>% 
-  mutate(RH = rh_ice) 
-synoptic_rh_ice
-
-
-## Join ice and liquid into one tibble
-rh <- rbind(synoptic_rh_liquid, synoptic_rh_ice) 
-
-# count how many negative values in "rh"
-nrow(rh[rh$RH<0,])
-  # 1705 negative out of 121,618 rows
-
-# percent with negative RH in "rh"
-1705/121618  # 1.5%
-
-# filter out negative rh
-rh <- rh %>% 
-  filter(RH >= 0) 
-```
 
 
 # Merge rh with hourly_wind for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
@@ -229,21 +110,16 @@ ggplot( aes(date, (temperature-32)*(5/9))) +
 #events of note (freezing, fog, high winds) by month, with RH fog and homogenized wind data 1941-2022 (see homogenization.rmd for more details on homogenization)
 ```{r}
 #clean data
-homogenized_hourly <- hourly_wind %>% 
-  filter(year(date) >= 1941) %>%
-  mutate(wind_speed = as.numeric(wind_speed)) 
-
-homogenized_hourly <- homogenized_hourly %>%
+homogenized_hourly <- hourly_wind %>%
   mutate(homogenized_wind = ifelse(year(date) <=1981, homogenized_hourly$wind_speed*1.05, homogenized_hourly$wind_speed)) 
 
 #round hourly wind data down to the nearest hour
 homogenized_hourly <- homogenized_hourly %>%
   mutate(date = floor_date(homogenized_hourly$date, unit = "hour"))
 
-#round up hour
+#round up temperature hour
 hourly_temp <- hourly_temp %>% 
   mutate(date = ceiling_date(hourly_temp$date, unit = "hour"), temperature = as.numeric(temperature))
-
 
 #merge RH and homogenized hourly wind data
 merged_data_41 <- merge(rh, homogenized_hourly, by = 'date')
