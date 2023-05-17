@@ -33,6 +33,12 @@ hourly_temp <- hourly_temp %>%
   mutate(date = ceiling_date(hourly_temp$date, unit = "hour"))
 
 hourly_temp <- rbind(hourly_temp, temp_2022)
+
+## convert to °C
+hourly_temp <- hourly_temp %>% 
+  mutate(temperature = (temperature-32)*(5/9))
+
+write.csv(hourly_temp, file = "Data/temp_from_temperature_analysis_rmd.csv")
 ```
 
 
