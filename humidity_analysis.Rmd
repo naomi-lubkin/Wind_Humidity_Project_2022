@@ -353,6 +353,7 @@ rh %>%
   filter(month(date) == 6 | month(date) == 7 | month(date) == 8) %>% # for JJA
   summarize(avg = mean(RH))
 
+
 ```
 
 ```{r}
@@ -668,6 +669,9 @@ year_rh <- season_rh %>%
   group_by(year) %>% 
   summarize(avg_rh = mean(monthly_average_RH)) # get yearly avg from monthly avg
 
+# overall average 1941 - 2022
+year_rh %>% 
+  summarize(avg_rh = mean(avg_rh))
 
 pdf(file = "Figures/rh_annual_1941.pdf", width = 8, height = 5)
 year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
@@ -705,6 +709,9 @@ clear_summary <- clear %>%
   group_by(year) %>% 
   summarize(avg_rh = mean(avg_rh))
 
+# average in the clear 1941 - 2022 
+clear_summary %>% 
+  summarize(mean(avg_rh))
 # visual: dotplot
 pdf(file = "Figures/rh_in_the_clear.pdf", width = 8, height = 5)
 clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)

@@ -29,36 +29,17 @@ library(pscl) #for hurdle model
 #pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
 #wind data
-hourly_wind <- read_csv("Data/wind_from_wind_1941_2022_rmd.csv") 
+hourly_wind <- read_csv("Data/wind_from_wind_1941_2022_rmd.csv") %>% 
+  unite("date", 2:3, sep = " ") %>% 
+  mutate(date = as.POSIXct(date, t="EST", format = "%Y-%m-%d %H:%M:%OS"))
 
 #temp data
-hourly_temp <- read_csv("Data/b16-hourly temperature 1935-2021.csv") %>% 
-  
-  mutate(temperature = as.numeric(temperature)) 
-temp_2022 <- read_csv("Data/2022_temp_hourly.csv")
+hourly_temp <- read_csv("Data/temp_from_temperature_analysis_rmd.csv")
 
 #rh data
 rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") 
 
 ```
-
-# Update to add 2022 data (doesn't include weather codes)
-```{r}
-
-## TEMP
-
-#round up hour
-temp_2022 <- temp_2022 %>% 
-  mutate(time = round_date(temp_2022$time, unit = "hour"), temperature = f_temp, date = time) %>% 
-  dplyr::select(date, temperature) 
-
-hourly_temp <- hourly_temp %>% 
-  mutate(date = ceiling_date(hourly_temp$date, unit = "hour"))
-
-hourly_temp <- rbind(hourly_temp, temp_2022)
-
-```
-
 
 
 # Merge rh with hourly_wind for 1981-2022 (merging wind with homogenized 1941-2022 wind data is below)
@@ -99,7 +80,7 @@ merged_data <- merged_data %>%
 #checking temp overlap
 merged_data %>% 
   filter(year(date) > 2021) %>% 
-ggplot( aes(date, (temperature-32)*(5/9))) +
+ggplot(aes(date, temperature)) +
   geom_line() +
   geom_line(aes(x = date, y = dry_bulb, col = "red", alpha = 0.3))
 ```
@@ -131,7 +112,7 @@ merged_data_41 <- merge(hourly_temp, merged_data_41, by = 'date')
 merged_data_41 <- merged_data_41 %>% 
   dplyr::select(date, temperature, dry_bulb, wet_bulb, pressure_mb, RH,  homogenized_wind)
 ```
-
+# Averages
 
 #datasets for each wind threshold, 1941-2022
 ```{r}
@@ -806,7 +787,6 @@ mod_above25_dec_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above25dec_formod_41, 
                        control = gamlss.control())
-#p-value: 0.234209    
 summary(mod_above25_dec_41)
 
 
@@ -838,7 +818,6 @@ mod_above25_feb_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above25feb_formod_41, 
                        control = gamlss.control(n.cyc = 50))
-#p-value: 0.40553
 summary(mod_above25_feb_41)
 
 
@@ -870,7 +849,6 @@ mod_above25_apr_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above25apr_formod_41, 
                        control = gamlss.control())
-#p-value: 0.890
 summary(mod_above25_apr_41)
 
 
@@ -887,7 +865,6 @@ mod_above25_may_41 <- gamlss(count_events~year,
                        family = PIG(), 
                        data=above25may_formod_41, 
                        control = gamlss.control())
-#p-value: 0.1725
 summary(mod_above25_may_41)
 
 
@@ -903,7 +880,6 @@ mod_above25_jun_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above25jun_formod_41, 
                        control = gamlss.control())
-#p-value: 0.669
 summary(mod_above25_jun_41)
 
 
@@ -954,7 +930,6 @@ mod_above60_dec_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60dec_formod_41, 
                        control = gamlss.control())
-#p-value: 359
 summary(mod_above60_dec_41)
 
 
@@ -971,7 +946,6 @@ mod_above60_jan_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60jan_formod_41, 
                        control = gamlss.control())
-#p-value: 0.685
 summary(mod_above60_jan_41)
 
 
@@ -988,7 +962,6 @@ mod_above60_feb_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60feb_formod_41, 
                        control = gamlss.control())
-#p-value: 0.670
 summary(mod_above60_feb_41)
 
 
@@ -1005,7 +978,6 @@ mod_above60_mar_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60mar_formod_41, 
                        control = gamlss.control())
-#p-value: 0.773
 summary(mod_above60_mar_41)
 
 
@@ -1021,7 +993,6 @@ mod_above60_apr_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60apr_formod_41, 
                        control = gamlss.control())
-#p-value: 0.846
 summary(mod_above60_apr_41)
 
 
@@ -1039,7 +1010,6 @@ mod_above60_may_41 <- gamlss(count_events~year,
                        family = GEOM(), 
                        data=above60may_formod_41, 
                        control = gamlss.control())
-#p-value: 0.669
 summary(mod_above60_may_41)
 
 
@@ -1058,7 +1028,6 @@ mod_above60_jun_41 <- gamlss(count_events~year,
                        family = DPO(), 
                        data=above60jun_formod_41, 
                        control = gamlss.control(n.cyc = 100))
-#p-value: 0.669
 summary(mod_above60_jun_41)
 
 ###############################################################################
