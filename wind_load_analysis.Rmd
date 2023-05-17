@@ -56,11 +56,9 @@ hourly_wind <- rbind(hourly_wind_41on, hourly_wind_22)
 
 #calculating wind speed in m/s from mph (1 mph = 0.44704 m/s)
 hourly_wind <- hourly_wind %>%
-  mutate(wind_ms = wind_speed * 0.44704) %>%
-  rename(wind_mph = wind_speed) %>%
-  mutate(homogenized_mph = ifelse(year <=1981, wind_mph*1.05, wind_mph), 
-         homogenized_ms = ifelse(year <=1981, wind_ms*1.05, wind_ms))
-
+  mutate(wind_speed = ifelse(year <=1981, wind_speed*1.05, wind_speed)) %>% # homogenize the data
+  mutate(homogenized_ms = wind_speed * 0.44704) # convert to m/s
+  
 ```
 
 # Calculate Wind Load 
