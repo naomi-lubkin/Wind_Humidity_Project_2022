@@ -117,7 +117,7 @@ rh <- rh %>%
 
 
 # Export dataset 
-write.csv(rh, file = "Data/rh_from_umidity_analysis_rmd.csv")
+write.csv(rh, file = "Data/rh_from_humidity_analysis_rmd.csv")
 
 rh <- rh %>% 
   filter(year >= 1941)
