@@ -192,6 +192,7 @@ summary(wl.fall.lm) #not significant
 
 # Table (using sens slope instead) 
 ```{r}
+## 1941-2022
 ## Annual trends
 
 annual_trends <- wind_load_annual %>% 
@@ -224,5 +225,44 @@ wl_table <- annual_trends_all %>%
   kable_classic(full_width = F, html_font = "Cambria") 
 
 save_kable(wl_table, file = "Figures/wind_load_table.pdf")
+
+
+
+##1981-2022
+
+## Annual trends
+
+annual_trends <- wind_load_annual %>% 
+  filter(year >= 1981) %>% 
+  mutate(season = 'Annual') %>% 
+  summarize(annual_trend = sens.slope(wind_load, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(wind_load, conf.level = 0.95)[["p.value"]]) 
+
+## Seasonal trends
+
+seasonal_trends <- wind_load_seasonal %>%
+  filter(year >= 1981) %>% 
+  group_by(season) %>%
+  summarize(annual_trend = sens.slope(seasonal_avg_wl, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(seasonal_avg_wl, conf.level = 0.95)[["p.value"]])
+
+## Combining to make table
+
+annual_trends_all <- bind_rows(annual_trends, seasonal_trends)  %>%
+  mutate(decadal_trend = annual_trend*10,
+         " " = ifelse(is.na(season), "Annual", season),
+         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
+         "Decadal trend" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "p-value" = p) %>%
+  dplyr::select(" ", "Decadal trend") %>%
+  distinct() %>%   # removes rows with repeat values
+  as.data.frame(html_table())
+
+wl_table <- annual_trends_all %>%
+  kbl(caption = "Decadal Trends of wind load from 1981-2022") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind load trends")) %>%
+  kable_classic(full_width = F, html_font = "Cambria") 
+
+save_kable(wl_table, file = "Figures/wind_load_table_1981.pdf")
 ```
 
