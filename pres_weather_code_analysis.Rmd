@@ -26,7 +26,7 @@ library(gamlss)
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
-#rh data
+#rh data 1935? - 2022
 rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv")
 
 ```
@@ -134,10 +134,12 @@ fog_proportions <- fog_comparison %>%
 
 ```{r}
 #comparison overall (by year)
-pdf(files = "Figures/RH_Fog_code_matchup.pdf")
+pdf(file = "Figures/RH_Fog_code_matchup.pdf")
 fog_proportions %>%
   ggplot(aes(x=year, y=proportion, fill = fogs_match)) +
-  geom_col() 
+  geom_col() +
+  labs(title = "RH Reading vs. Weather Code Comparison", legend.title = "Code and RH match?", caption = "Fog determined when RH >= 96% or when Present Weather Code is F, and past hour was not intermittent fog", fill = "Fogs match?") + 
+  scale_fill_manual(values = c("firebrick", "skyblue"))
 dev.off()
 
 
@@ -146,5 +148,6 @@ fog_proportions %>%
   filter(fogs_match == F) %>% 
   ungroup() %>% 
   summarise(not_matching = mean(proportion))
+
 
 ```
