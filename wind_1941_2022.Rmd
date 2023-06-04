@@ -125,6 +125,34 @@ yearly_avg <- daily_avg %>%
                             year >= 1981 ~ "3", 
                             TRUE ~ NA_character_))
 
+## 1941 - 2022 Averages
+
+#overall
+yearly_avg %>% 
+  filter(year >= 1941) %>% 
+  summarize(avg = mean(homogenized_wind))
+
+#seasonal
+homogenized_seasonal %>% 
+  filter(year >= 1941) %>% 
+  group_by(season) %>% 
+  summarize(avg = mean(monthly_avg_wind))
+
+
+
+## 1981 - 2022 Averages
+
+#overall
+yearly_avg %>% 
+  filter(year >= 1981) %>% 
+  summarize(avg = mean(homogenized_wind))
+
+#seasonal
+homogenized_seasonal %>% 
+  filter(year >= 1981) %>% 
+  group_by(season) %>% 
+  summarize(avg = mean(monthly_avg_wind))
+
 ```
 
 
