@@ -16,6 +16,7 @@ library(dplyr)
 library(ggplot2)
 library(readr)
 library(patchwork)
+library(trend)
 ```
 
 # Load Data
@@ -78,7 +79,7 @@ wind_load_data <- hourly_wind %>%
 
 ```
 
-#getting seasonal and annual wind loads
+#getting seasonal, annual, monthly wind loads: 1941 to 1981
 ```{r}
 #seasonal averages
 #first, daily averages from hourly so seasonal code works
@@ -126,11 +127,26 @@ wind_load_annual <- wind_load_monthly%>%
 
 ```
 
+#getting daily, monthly, annual wind loads: 1981-2022
+```{r}
+#daily
+wl_daily_81 <- wl_daily %>%
+  filter(year >= 1981 )
+
+#monthly
+wl_monthly_81 <- wind_load_monthly %>%
+  filter(year >= 1981 )
+
+#annual
+wl_annual_81 <- wind_load_annual %>%
+  filter(year >= 1981)
+
+```
 
 
 # Wind Load Figures 
 ```{r}
-#wind load through time: this is with homogenized wind speeds
+#wind load through time: this is with homogenized wind speeds 1941-2022
 pdf(file = "Figures/annual_wind_load.pdf", width = 8, height = 5)
 wl_annual_plot <- ggplot(data = wind_load_annual, aes(x = year, y = wind_load)) + 
   geom_point() +
@@ -147,6 +163,16 @@ wl_seasonal_plot <- ggplot(data = wind_load_seasonal, aes(x=year, y=seasonal_avg
   theme_classic()+
   labs(x="Year", y="Wind Load")
 dev.off()
+
+
+
+#pdf(file = "Figures/monthly_wind_load", width = 8, height = 5)
+wl_monthly_plot <- ggplot(data = wind_load_monthly, aes(x=year, y=wind_load)) +
+  geom_point()+
+  facet_wrap( ~month) +
+  theme_classic()+
+  labs(x="Year", y="Wind Load")
+#dev.off()
 
 
 
@@ -185,4 +211,160 @@ summary(wl.summer.lm) #not significant
 
 wl.fall.lm <- lm(seasonal_avg_wl ~ year, wl_fall) #fall (SON)
 summary(wl.fall.lm) #not significant
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#MONTHLY: dataframes
+wl_jan_41 <- wind_load_monthly %>%
+  filter(month == 1)
+
+wl_jan_81 <- wl_monthly_81 %>%
+  filter(month == 1)
+
+wl_feb_41 <- wind_load_monthly %>%
+  filter(month == 2)
+
+wl_feb_81 <- wl_monthly_81 %>%
+  filter(month == 2)
+
+wl_mar_41 <- wind_load_monthly %>%
+  filter(month == 3)
+
+wl_mar_81 <- wl_monthly_81 %>%
+  filter(month == 3)
+
+wl_apr_41 <- wind_load_monthly %>%
+  filter(month == 4)
+
+wl_apr_81 <- wl_monthly_81 %>%
+  filter(month == 4)
+
+wl_may_41 <- wind_load_monthly %>%
+  filter(month == 5)
+
+wl_may_81 <- wl_monthly_81 %>%
+  filter(month == 5)
+
+wl_jun_41 <- wind_load_monthly %>%
+  filter(month == 6)
+
+wl_jun_81 <- wl_monthly_81 %>%
+  filter(month == 6)
+
+wl_jul_41 <- wind_load_monthly %>%
+  filter(month == 7)
+
+wl_jul_81 <- wl_monthly_81 %>%
+  filter(month == 7)
+
+wl_aug_41 <- wind_load_monthly %>%
+  filter(month == 8)
+
+wl_aug_81 <- wl_monthly_81 %>%
+  filter(month == 8)
+
+wl_sep_41 <- wind_load_monthly %>%
+  filter(month == 9)
+
+wl_sep_81 <- wl_monthly_81 %>%
+  filter(month == 9)
+
+wl_oct_41 <- wind_load_monthly %>%
+  filter(month == 10)
+
+wl_oct_81 <- wl_monthly_81 %>%
+  filter(month == 10)
+
+wl_nov_41 <- wind_load_monthly %>%
+  filter(month == 11)
+
+wl_nov_81 <- wl_monthly_81 %>%
+  filter(month == 11)
+
+wl_dec_41 <- wind_load_monthly %>%
+  filter(month == 12)
+
+wl_dec_81 <- wl_monthly_81 %>%
+  filter(month == 12)
+
+#wl monthly sen slopes: 1941- 2022
+#nothing significant, two that were closest are oct and nov
+wl_jan_41.sen <- sens.slope(wl_jan_41$wind_load, conf.level = 0.95)
+View(wl_jan_41.sen)
+
+wl_feb_41.sen <- sens.slope(wl_feb_41$wind_load, conf.level = 0.95)
+View(wl_feb_41.sen)
+
+wl_mar_41.sen <- sens.slope(wl_mar_41$wind_load, conf.level = 0.95)
+View(wl_mar_41.sen)
+
+wl_apr_41.sen <- sens.slope(wl_apr_41$wind_load, conf.level = 0.95)
+View(wl_apr_41.sen)
+
+wl_may_41.sen <- sens.slope(wl_may_41$wind_load, conf.level = 0.95)
+View(wl_may_41.sen)
+
+wl_jun_41.sen <- sens.slope(wl_jun_41$wind_load, conf.level = 0.95)
+View(wl_jun_41.sen)
+
+wl_jul_41.sen <- sens.slope(wl_jul_41$wind_load, conf.level = 0.95)
+View(wl_jul_41.sen)
+
+wl_aug_41.sen <- sens.slope(wl_aug_41$wind_load, conf.level = 0.95)
+View(wl_aug_41.sen)
+
+wl_sep_41.sen <- sens.slope(wl_sep_41$wind_load, conf.level = 0.95)
+View(wl_sep_41.sen)
+
+wl_oct_41.sen <- sens.slope(wl_oct_41$wind_load, conf.level = 0.95)
+View(wl_oct_41.sen)
+#p=0.17, estimate = 0.0001
+
+wl_nov_41.sen <- sens.slope(wl_nov_41$wind_load, conf.level = 0.95)
+View(wl_nov_41.sen)
+#p=0.069, estimate = 0.0002
+
+wl_dec_41.sen <- sens.slope(wl_dec_41$wind_load, conf.level = 0.95)
+View(wl_dec_41.sen)
+
+#~~~~
+#wl monthly sen slopes: 1981 - 2022
+wl_jan_81.sen <- sens.slope(wl_jan_81$wind_load, conf.level = 0.95)
+View(wl_jan_81.sen)
+#estimate = -0.0005, p = 0.0486
+
+wl_feb_81.sen <- sens.slope(wl_feb_81$wind_load, conf.level = 0.95)
+View(wl_feb_81.sen)
+
+wl_mar_81.sen <- sens.slope(wl_mar_81$wind_load, conf.level = 0.95)
+View(wl_mar_81.sen)
+
+wl_apr_81.sen <- sens.slope(wl_apr_81$wind_load, conf.level = 0.95)
+View(wl_apr_81.sen)
+#estimate = 0.0005, p= 0.0687
+
+wl_may_81.sen <- sens.slope(wl_may_81$wind_load, conf.level = 0.95)
+View(wl_may_81.sen)
+
+wl_jun_81.sen <- sens.slope(wl_jun_81$wind_load, conf.level = 0.95)
+View(wl_jun_81.sen)
+
+wl_jul_81.sen <- sens.slope(wl_jul_81$wind_load, conf.level = 0.95)
+View(wl_jul_81.sen)
+
+wl_aug_81.sen <- sens.slope(wl_aug_81$wind_load, conf.level = 0.95)
+View(wl_aug_81.sen)
+
+wl_sep_81.sen <- sens.slope(wl_sep_81$wind_load, conf.level = 0.95)
+View(wl_sep_81.sen)
+
+wl_oct_81.sen <- sens.slope(wl_oct_81$wind_load, conf.level = 0.95)
+View(wl_oct_81.sen)
+
+wl_nov_81.sen <- sens.slope(wl_nov_81$wind_load, conf.level = 0.95)
+View(wl_nov_81.sen)
+
+wl_dec_81.sen <- sens.slope(wl_dec_81$wind_load, conf.level = 0.95)
+View(wl_dec_81.sen)
+#estimate = -0.0005, p = 0.019
+
 ```
