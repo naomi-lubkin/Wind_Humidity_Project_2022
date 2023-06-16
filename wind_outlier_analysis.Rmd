@@ -1,0 +1,295 @@
+---
+title: "monthly wind outlier analysis"
+author: "Naomi Lubkin"
+output: html_document
+date: '2022-07-01'
+---
+Identification and removal of outliers from monthly wind data, 1981-2021.  
+
+#Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+# setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+library(here)
+here::here()
+library(dplyr)
+library(stats)
+library(patchwork)
+library(lubridate)
+library(ggstatsplot)
+library(trend)
+```
+
+#Loading in data
+```{r}
+#b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
+monthly_avg <- read_csv(here("Data", "b16-hourly monthly wind average 1935-2021.csv"))
+
+```
+
+#Making necessary datasets
+```{r}
+#making monthly average data right class, and digits rounded to same number as in the B16
+monthly_avg <- monthly_avg %>%
+  mutate(monthly_avg_speed = round(as.numeric(monthly_avg_speed), digits = 1), 
+         date = as.Date(date), 
+         month = month(date), 
+         year =year(date)) %>%
+  filter(year>=1981) # filtering for post-1981 because of location shift (data is not homogenized yet)
+
+#filtering monthly averages by month, and excluding all data from before 1981
+#Nov 
+nov_avgs <- monthly_avg %>%
+  filter(month ==11) 
+
+#Dec
+dec_avgs <- monthly_avg %>%
+  filter(month ==12) 
+
+#Jan
+jan_avgs <- monthly_avg %>%
+  filter(month ==1) 
+#Feb
+feb_avgs <- monthly_avg %>%
+  filter(month ==2) 
+
+#Mar
+mar_avgs <- monthly_avg %>%
+  filter(month ==3)
+  
+#Apr
+apr_avgs <- monthly_avg %>%
+  filter(month ==4) 
+
+#May
+may_avgs <- monthly_avg %>%
+  filter(month ==5)
+
+#Jun
+jun_avgs <- monthly_avg %>%
+  filter(month ==6) 
+
+```
+
+#Outlier calculations 1981-2021
+```{r}
+#boxplot to identifiy outliers (outside the 1.5 IQR range = outlier)
+boxplot(monthly_avg_speed ~ month, data = monthly_avg, 
+        xlab = "Month", 
+        ylab = "Average Wind Speed (mph)", 
+        main = "Monthly Average Wind Speeds 1981-2021")
+
+#manual removal of outliers: identified them above, then noted the row of each outlier and manually took each row out
+outliers <- boxplot(monthly_avg_speed ~ month, data = monthly_avg, plot = FALSE)$out
+no_outliers <- monthly_avg[-c(37, 241, 16, 17, 137, 197, 197, 283, 295, 93, 286, 239, 12, 360), ]
+
+#boxplot of wind speeds by month with outliers removed
+boxplot(monthly_avg_speed ~ month, data = no_outliers, 
+        xlab = "Month", 
+        ylab = "Average Wind Speed (mph)", 
+        main = "Monthly Average Wind Speeds 1981-2021 (outliers excluded)")
+
+
+#making monthly dataframes with the outliers excluded
+#only including months of interest (winter/spring) and months that have outliers
+#nov
+nov_avgs_noout <- no_outliers %>%
+  filter(month ==11)
+
+#dec
+dec_avgs_noout <- no_outliers %>%
+  filter(month ==12)
+
+#jan
+jan_avgs_noout <- no_outliers %>%
+  filter(month ==1)
+
+
+#apr
+apr_avgs_noout <- no_outliers %>%
+  filter(month ==4)
+
+#may
+may_avgs_noout <- no_outliers %>%
+  filter(month ==5)
+
+
+```
+
+
+
+
+#Plots with outliers
+```{r}
+#Nov
+#plot of Nov averages 1981-2021, outliers included
+nov_plot <- nov_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+
+#Dec
+#plot of Dec averages 1981-2021, outliers included
+dec_plot <- dec_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Jan
+#plot of Jan averages 1981-2021, outliers inlcluded
+jan_plot <- jan_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+
+#Apr
+apr_plot <- apr_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+ ggtitle("April") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#May
+may_plot <- may_avgs %>%
+  ggplot(aes(x = date, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+```
+
+
+
+#Plots with no outliers (outliers excluded)
+```{r}
+#November 
+nov_noout_plot <- nov_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("November - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Dec
+dec_noout_plot <- dec_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("December - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Jan
+jan_noout_plot <- jan_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("January - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#Apr
+apr_noout_plot <- apr_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("April - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+#May
+may_noout_plot <- may_avgs_noout %>%
+  ggplot(aes(x = year, y = monthly_avg_speed ))+
+  geom_point() +
+  ylim(0,55) +
+  labs (x = "Year", y = "Wind Speed (mph)") +
+  ggtitle("May - Outliers Removed") +
+  theme_minimal() +
+  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) 
+
+```
+
+#Comparison plots (outliers vs no outliers by month)
+```{r}
+#Nov
+nov_comp <- nov_plot + nov_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Dec
+dec_comp <- dec_plot + dec_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Jan
+jan_comp <- dec_plot + jan_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#Apr
+apr_comp <- apr_plot + apr_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+#May
+may_comp <- may_plot + may_noout_plot +plot_annotation(
+  title = "Monthly Wind Averages")
+
+
+#comparing all to all 
+normal_plot <- nov_plot + dec_plot + apr_plot + may_plot + plot_annotation( title = "Monthly Wind Averages 1981-2021")
+
+no_out_plot <- nov_noout_plot + dec_noout_plot + jan_noout_plot + apr_noout_plot + may_noout_plot + plot_annotation("Monthly Wind Averages 1981-2021 - Outliers Excluded")
+
+```
+
+#Sen slopes/p-values no outliers
+```{r}
+#nov
+novnoout.sen <- sens.slope(nov_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(novnoout.sen)
+
+#dec
+decnoout.sen <- sens.slope(dec_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(decnoout.sen)
+
+#jan
+jannoout.sen <- sens.slope(jan_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(jannoout.sen)
+
+
+#apr
+aprnoout.sen <- sens.slope(apr_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(aprnoout.sen)
+
+#may
+maynoout.sen <- sens.slope(may_avgs_noout$monthly_avg_speed, conf.level = 0.95)
+View(maynoout.sen)
+```
+
+
+
+

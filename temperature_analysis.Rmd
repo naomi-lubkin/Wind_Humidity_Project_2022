@@ -5,7 +5,7 @@ date: "2023-05-15"
 output: html_document
 ---
 
-This markdown uses hourly temperature data to look for seasonal and annual trends. Temperature is in Fahrenheit.
+This markdown uses hourly temperature data to look for seasonal and annual trends. Temperature is converted to Celsius.
 
 #Load Packages
 ```{r}
@@ -99,7 +99,7 @@ ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
   theme_minimal() +
   ylim(20, 33) +
   xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
-  labs(x = "Year", y = "Temperature °F") +
+  labs(x = "Year", y = "Temperature °C") +
   ggtitle("Average Temperatures 1941-2022") + 
   annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
@@ -116,7 +116,7 @@ ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
   theme_minimal() +
   ylim(20, 33) +
   xlim(1981, 2022) +
-  labs(x = "Year", y = "Temperature °F") +
+  labs(x = "Year", y = "Temperature °C") +
   ggtitle("Average Temperatures 1981-2022") + 
   annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
@@ -166,7 +166,7 @@ annual_trends_all <- bind_rows(annual_trends, seasonal_trends)  %>%
   as.data.frame(html_table())
 
 temp_table <- annual_trends_all %>%
-  kbl(caption = "Decadal Trends of Temperature (°F) from 1941-2022") %>%
+  kbl(caption = "Decadal Trends of Temperature (°C) from 1941-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual temperature trends")) %>%
   kable_classic(full_width = F, html_font = "Cambria") 
 
