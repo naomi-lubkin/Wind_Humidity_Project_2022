@@ -117,10 +117,10 @@ rh <- rh %>%
 
 
 # Export dataset 
-write.csv(rh, file = "Data/rh_from_umidity_analysis_rmd.csv")
+write.csv(rh, file = "Data/rh_from_humidity_analysis_rmd.csv")
 
 rh <- rh %>% 
-  filter(year >= 1941)
+  filter(year(date) >= 1941)
 ```
 
 
@@ -832,7 +832,7 @@ ff_annual_trends_all <- bind_rows(ff_annual_trend, ff_seasonal_trend)  %>%
 
 
 ff_table <- ff_annual_trends_all %>% 
-  kbl(caption = "Decadal Trends of Fog Frequency from 1935-2022") %>%
+  kbl(caption = "Decadal Trends of Fog Frequency from 1941-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual fog frequency trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria")  
 
@@ -907,7 +907,7 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
 
 
 rh_table <- annual_trends_all %>%
-  kbl(caption = "Decadal Trends of Relative Humidity from 1935-2022") %>%
+  kbl(caption = "Decadal Trends of Relative Humidity from 1941-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>% 
   group_rows(group_label = "All", start_row = 1, end_row = 5, hline_after = T) %>% 
