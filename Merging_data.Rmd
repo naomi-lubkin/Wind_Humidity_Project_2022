@@ -727,14 +727,6 @@ dev.off()
 
 ```
 
-#Dealing with zeros: Hurdle Models
-```{r}
-oct_hurdle.mod <- hurdle(count_events ~ year, above100oct_formod_41, dist = "poisson", zero.dist = "poisson")
-summary(oct_hurdle.mod)
-
-
-```
-
 
 #stats: events 1941-2022
 The p-values and AIC values written are not up-to-date (from before 2022 was added)
@@ -855,7 +847,7 @@ summary(mod_above25_apr_41)
 ##May
 #fitting the distribution 
 #Best fit: PIG, AIC: 620.32 
-(AIC: 635.99)
+#(AIC: 635.99)
 fitDist(count_events,
         data = above25may_formod_41, 
         type = "counts", 
