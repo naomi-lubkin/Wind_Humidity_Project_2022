@@ -1,0 +1,52 @@
+---
+title: "Blowing Snow Analysis"
+author: "Naomi Lubkin"
+date: '2022-07-04'
+output: html_document
+---
+#Blowing Snow
+##An analysis of blowing snow frequency over time, as determined by "BS" coded in present weather column of B16. 
+##may not be useful, as how blowing snow is coded may have changed over time, and blowing snow on the summit likely does not correspond to blowing snow at tree line. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pres_weather <- read_csv(here("Data", "b16 hourly present weather split by code 1935-2021 (1).csv"))
+```
+
+
+```{r}
+#cleaning data: making a column that returns BS if any present weather column for that hour has blowing snow coded for it, and making the date column the correct data type
+blowing_snow <- pres_weather %>%
+  mutate(bs= case_when(
+    pw1 == "BS" ~"BS", 
+    pw2 == "BS" ~"BS", 
+    pw3 =="BS" ~"BS", 
+    pw4 == "BS" ~"BS", 
+    pw5 == "BS" ~"BS", 
+    pw6 == "BS" ~"BS", 
+    pw7 == "BS" ~"BS", 
+    pw8 == "BS" ~"BS", 
+    pw9 == "BS" ~"BS", 
+    TRUE ~ as.character(NA))) %>%
+  mutate(date = as.Date(date), 
+         year = year(date))
+
+#counts
+#counting the number of times (hours) blowing snow was coded per year
+count_blowing_snow <- blowing_snow %>%
+  count(year, bs) %>%
+  filter(bs == "BS")
+
+#plot
+#plotting the counts of blowing snow per year since 1935
+bs_plot <- count_blowing_snow %>%
+  ggplot(aes(x=year, y=n)) +
+  geom_point(stat= "identity") +
+  labs(x="Year", y="Hours with Blowing Snow") +
+  ggtitle("Number of Hours with Blowing Snow 1935-2021") +
+  theme_minimal()
+  
+```
+
