@@ -28,15 +28,15 @@ library(pscl) #for hurdle model
 #b16 hourly present weather, split by code, jan 1935-dec 2021
 #pres_weather <- read_csv("Data/b16 hourly present weather split by code 1935-2021.csv")
 
-#wind data
+#wind data (from wind_1941_2022.rmd, in mph)
 hourly_wind <- read_csv("Data/wind_from_wind_1941_2022_rmd.csv") %>% 
   unite("date", 2:3, sep = " ") %>% 
   mutate(date = as.POSIXct(date, t="EST", format = "%Y-%m-%d %H:%M:%OS"))
 
-#temp data
+#temp data (from temperature_analysis.rmd, in celsius)
 hourly_temp <- read_csv("Data/temp_from_temperature_analysis_rmd.csv")
 
-#rh data
+#rh data (from humidity_analysis.rmd, in celsius)
 rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") 
 
 ```
@@ -114,7 +114,7 @@ merged_data_41 <- merged_data_41 %>%
 ```
 # Averages
 
-#datasets for each wind threshold, 1941-2022
+# datasets for each wind threshold, 1941-2022
 ```{r}
 #25mph threshold
 #wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 25mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
