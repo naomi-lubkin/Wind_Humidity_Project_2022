@@ -857,7 +857,7 @@ annual <- year_rh %>%
 ## Seasonal
 
 annual_season <- season_summary %>% 
-  mutate(avg_rh = average_RH) %>% 
+  mutate(avg_rh = average_RH, season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
   group_by(season) %>% 
   summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
             p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
@@ -876,6 +876,7 @@ annual_clear <- clear_summary %>%
             type = "Clear") 
 #seasonal
 annual_season_clear <- clear %>% 
+  mutate(season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
   group_by(date(date), month, season, year_for_winter) %>% 
   summarize(avg_rh = mean(RH)) %>% #daily avg
   group_by(month, season, year_for_winter) %>% 
@@ -893,7 +894,7 @@ annual_season_clear <- clear %>%
 annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_season_clear)  %>% 
   mutate(Type = type, 
          decadal_trend = annual_trend*10,
-         " " = ifelse(is.na(season), "Annual", season), 
+         " " = ifelse(is.na(season), "Annual", as.character(season)),
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Decadal trend (%/decade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
          "p-value" = p) %>% 
