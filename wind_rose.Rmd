@@ -10,18 +10,21 @@ Wind roses showing wind directions for different time periods.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
-library(here)
-here::here()
 library(dplyr)
 library(openair)
 library(climatol)
+library(readr)
+library(tidyr)
+library(lubridate)
+library(RColorBrewer)
+
+
 ```
 
 #Loading in required data
 ```{r}
 #hourly speed and direction 1935-2021
-hourly_spd_dir <- read_csv("//wdc-fileserver.mwo.local/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Data/b16-hourly wind speed plus direction 1935-2021.csv")
+hourly_spd_dir <- read_csv("Data/b16-hourly wind speed plus direction 1935-2021.csv")
 
 
 ```
@@ -51,32 +54,51 @@ hourly_spd_dir_rose <- hourly_spd_dir %>%
                                         wind_direction == "SW" ~ "SW",
                                         wind_direction == "W" ~ "W",
                                         wind_direction == "NW" ~ "NW")) %>%
-  mutate(dir_deg = case_when(simple_direction == "N" ~ 0,
-                             simple_direction == "NE" ~ 45,
-                             simple_direction== "E" ~ 90,
-                             simple_direction== "SE" ~ 135,
-                            simple_direction == "S" ~ 180,
-                             simple_direction== "SW" ~ 225,
-                             simple_direction== "W" ~ 270,
-                            simple_direction== "NW" ~ 315)) %>%
+  mutate(dir = case_when(wind_direction == "WSW" ~ 247.5, 
+                         wind_direction == "WNW" ~ 292.5, 
+                         wind_direction == "NNW" ~ 337.5,
+                         wind_direction == "NNE" ~ 22.5,
+                         wind_direction == "ENE" ~ 67.5,
+                         wind_direction == "ESE" ~ 112.5,
+                         wind_direction == "SSE" ~ 157.5,
+                         wind_direction == "SSW" ~ 202.5, 
+                         wind_direction == "N" ~ 0,
+                         wind_direction == "NE" ~ 45,
+                         wind_direction == "E" ~ 90,
+                         wind_direction == "SE" ~ 135,
+                         wind_direction == "S" ~ 180,
+                         wind_direction == "SW" ~ 225,
+                         wind_direction == "W" ~ 270,
+                         wind_direction == "NW" ~ 315)) %>%
   mutate(wind_speed = as.numeric(wind_speed), 
-         dir_deg = as.numeric(dir_deg)) %>%
+         dir = as.numeric(dir)) %>%
   drop_na() %>%
-  mutate(year = year(date))
+  mutate(year = year(date), 
+         month=month(date)) %>%
+  mutate(season = case_when(month == 12 ~  "Winter", 
+                            month == 1 ~ "Winter", 
+                            month == 2 ~  "Winter", 
+                            month == 3 ~  "Spring",
+                            month == 4 ~  "Spring",
+                            month == 5 ~  "Spring",
+                            month == 6 ~ "Summer",
+                            month == 7 ~ "Summer",
+                            month == 8 ~ "Summer",
+                            month == 9  ~ "Fall", 
+                            month == 10  ~ "Fall", 
+                            month == 11  ~ "Fall"))
 
 
 #wind speeds/directions 1981-2021
 #hourly, grouped by "era" so plotting later is easier
 hourly_spd_dir_byyear <- hourly_spd_dir_rose %>%
-  mutate(era = case_when (year <= 1940 ~ "1935-1940", 
-                            year %in% 1941:1980 ~ "1941-1980", 
+  mutate(era = case_when (year %in% 1941:1980 ~ "1941-1980", 
                             year >= 1981 ~ "1981-2021", 
                             TRUE ~ NA_character_))
 
 #hourly data 1981-2021
-hourly_since_1981 <- hourly_spd_dir_byyear %>%
-  filter(year >= 1981) %>%
-  mutate(date= as.numeric(date))
+hourly_since_1981 <- hourly_spd_dir_rose %>%
+  filter(year >= 1981)
 
 #monthly data, grouped by year
 monthly_spd_dir_byyear <- hourly_spd_dir_rose %>%
@@ -90,14 +112,158 @@ monthly_spd_dir_byyear <- hourly_spd_dir_rose %>%
 #Wind Rose
 ```{r}
 #this is wind rose from open air package
-wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir_deg", ws="wind_speed", type = "era", paddle= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
+#1941-1980 and 1981-2021 breaks
+wind_rose <- windRose(hourly_spd_dir_byyear, wd="dir", ws="wind_speed", type =  "era", paddle= FALSE, annotate=FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
 
 
 wind_rose
 
-#this is an attempt at wind rose from climatol package, don't quite have it working yet
-wind_rose2 <-rosavent(hourly_spd_dir_byyear$dir_deg, fint=5, flab=2, ang=3*pi/16, col=rainbow(10,0.5,0.92,start=0.33,end=0.2), margen=c(0,0,4,0), key=TRUE, uni="mph")
 
-wind_rose2
+wind_rose_81season <- windRose(hourly_since_1981, wd="dir", ws="wind_speed", type = "season", paddle= FALSE, annotate= FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
+
+wind_rose_81season
+
+wind_rose_seasonyear <- windRose(hourly_spd_dir_byyear, wd="dir", ws="wind_speed", type =  c("era", "season"), paddle= FALSE, annotate=FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
+
+wind_rose_seasonyear
+```
+
+#Trying to make a wind rose with ggplot 
+```{r}
+# WindRose.R
+require(ggplot2)
+require(RColorBrewer)
+
+plot.windrose <- function(data,
+                      spd,
+                      dir,
+                      spdres = 2,
+                      dirres = 30,
+                      spdmin = 2,
+                      spdmax = 20,
+                      spdseq = NULL,
+                      palette = "YlGnBu",
+                      countmax = NA,
+                      debug = 0){
+
+
+# Look to see what data was passed in to the function
+  if (is.numeric(spd) & is.numeric(dir)){
+    # assume that we've been given vectors of the speed and direction vectors
+    data <- data.frame(spd = spd,
+                       dir = dir)
+    spd = "spd"
+    dir = "dir"
+  } else if (exists("data")){
+    # Assume that we've been given a data frame, and the name of the speed 
+    # and direction columns. This is the format we want for later use.    
+  }  
+
+  # Tidy up input data ----
+  n.in <- NROW(data)
+  dnu <- (is.na(data[[spd]]) | is.na(data[[dir]]))
+  data[[spd]][dnu] <- NA
+  data[[dir]][dnu] <- NA
+
+  # figure out the wind speed bins ----
+  if (missing(spdseq)){
+    spdseq <- seq(spdmin,spdmax,spdres)
+  } else {
+    if (debug >0){
+      cat("Using custom speed bins \n")
+    }
+  }
+  # get some information about the number of bins, etc.
+  n.spd.seq <- length(spdseq)
+  n.colors.in.range <- n.spd.seq - 1
+
+  # create the color map
+  spd.colors <- colorRampPalette(brewer.pal(min(max(3,
+                                                    n.colors.in.range),
+                                                min(9,
+                                                    n.colors.in.range)),                                               
+                                            palette))(n.colors.in.range)
+
+  if (max(data[[spd]],na.rm = TRUE) > spdmax){    
+    spd.breaks <- c(spdseq,
+                    max(data[[spd]],na.rm = TRUE))
+    spd.labels <- c(paste(c(spdseq[1:n.spd.seq-1]),
+                          '-',
+                          c(spdseq[2:n.spd.seq])),
+                    paste(spdmax,
+                          "-",
+                          max(data[[spd]],na.rm = TRUE)))
+    spd.colors <- c(spd.colors, "grey50")
+  } else{
+    spd.breaks <- spdseq
+    spd.labels <- paste(c(spdseq[1:n.spd.seq-1]),
+                        '-',
+                        c(spdseq[2:n.spd.seq]))    
+  }
+  data$spd.binned <- cut(x = data[[spd]],
+                         breaks = spd.breaks,
+                         labels = spd.labels,
+                         ordered_result = TRUE)
+  # clean up the data
+  data. <- na.omit(data)
+
+  # figure out the wind direction bins
+  dir.breaks <- c(-dirres/2,
+                  seq(dirres/2, 360-dirres/2, by = dirres),
+                  360+dirres/2)  
+  dir.labels <- c(paste(360-dirres/2,"-",dirres/2),
+                  paste(seq(dirres/2, 360-3*dirres/2, by = dirres),
+                        "-",
+                        seq(3*dirres/2, 360-dirres/2, by = dirres)),
+                  paste(360-dirres/2,"-",dirres/2))
+  # assign each wind direction to a bin
+  dir.binned <- cut(data[[dir]],
+                    breaks = dir.breaks,
+                    ordered_result = TRUE)
+  levels(dir.binned) <- dir.labels
+  data$dir.binned <- dir.binned
+
+  # Run debug if required ----
+  if (debug>0){    
+    cat(dir.breaks,"\n")
+    cat(dir.labels,"\n")
+    cat(levels(dir.binned),"\n")       
+  }  
+
+  # deal with change in ordering introduced somewhere around version 2.2
+  if(packageVersion("ggplot2") > "2.2"){    
+    cat("Hadley broke my code\n")
+    data$spd.binned = with(data, factor(spd.binned, levels = rev(levels(spd.binned))))
+    spd.colors = rev(spd.colors)
+  }
+
+  # create the plot ----
+  p.windrose <- ggplot(data = data,
+                       aes(x = dir.binned,
+                           fill = spd.binned)) +
+    geom_bar() + 
+    scale_x_discrete(drop = FALSE,
+                     labels = waiver()) +
+    coord_polar(start = -((dirres/2)/360) * 2*pi) +
+    scale_fill_manual(name = "Wind Speed (m/s)", 
+                      values = spd.colors,
+                      drop = FALSE) +
+    theme(axis.title.x = element_blank())
+
+  # adjust axes if required
+  if (!is.na(countmax)){
+    p.windrose <- p.windrose +
+      ylim(c(0,countmax))
+  }
+
+  # print the plot
+  print(p.windrose)  
+
+  # return the handle to the wind rose
+  return(p.windrose)
+}
+
+p0<- plot.windrose(spd=hourly_spd_dir_rose$wind_speed, 
+                   dir=hourly_spd_dir_rose$dir)
 ```
 
