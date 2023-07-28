@@ -117,20 +117,20 @@ merged_data_41 <- merged_data_41 %>%
 # datasets for each wind threshold, 1941-2022
 ```{r}
 #25mph threshold
-#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 25mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 25mph or above, and have 100% relative humidity (indicates fog). returns N if criteria not met
 windfog25_41 <- merged_data_41 %>%
-  mutate(wind_fog = ifelse(homogenized_wind >= 25  & RH >= 96 & temperature < 32, "Y", "N"))
+  mutate(wind_fog = ifelse(homogenized_wind >= 25  & RH == 100 & temperature < 32, "Y", "N"))
 
 
 #60mph threshold
-#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 60mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 60mph or above, and have 100% relative humidity (indicates fog). returns N if criteria not met
 windfog60_41 <- merged_data_41 %>%
-  mutate(wind_fog = ifelse(homogenized_wind >= 60  & RH >= 96 & temperature < 32, "Y", "N"))
+  mutate(wind_fog = ifelse(homogenized_wind >= 60  & RH == 100 & temperature < 32, "Y", "N"))
 
 #100mph threshold
-#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 100mph or above, and have 96% or higher relative humidity (indicates fog). returns N if criteria not met
+#wind_fog column returns a "Y" for synoptic hours that are  below 32 degrees F, have wind averages for the hour 100mph or above, and have 100% relative humidity (indicates fog). returns N if criteria not met
 windfog100_41 <- merged_data_41 %>%
-  mutate(wind_fog = ifelse(homogenized_wind >= 100 & RH >= 96 & temperature < 32, "Y", "N"))
+  mutate(wind_fog = ifelse(homogenized_wind >= 100 & RH == 100 & temperature < 32, "Y", "N"))
 ```
 
 
@@ -441,7 +441,7 @@ dev.off()
 above25_oct_plot_41 <- above25_oct_41 %>%
   ggplot(aes(x=year, y=count_events)) +
   geom_point() +
-  geom_smooth(formula = y~x, se =FALSE, method = 'lm', show.legend = FALSE) +
+  geom_smooth(formula = y~x, se = FALSE, method = 'lm', show.legend = FALSE) +
   labs(x="Year", y="Number of Events") +
   theme(axis.text.x = element_text(angle = 60)) +
   ggtitle("October")
