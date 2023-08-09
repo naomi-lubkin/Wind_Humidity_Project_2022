@@ -177,9 +177,12 @@ season_rh %>%
 
 
 # Clear day differences in seasons
+pdf(file = "Figures/rh_density_plot.pdf", width = 8, height = 5)
 season_rh %>% 
   filter(RH < 100) %>% 
-ggplot(aes(x = RH, fill = season, color = season)) + geom_density(alpha = 0.5)
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
+  ggplot(aes(x = RH, fill = season, color = season)) + geom_density(alpha = 0.5) + theme_classic() 
+dev.off()
 ```
 
 
@@ -687,6 +690,32 @@ ggplot(year_rh, aes(year, avg_rh)) +
   annotate("text", x=2015, y=99, label = paste("Sen's Slope =", round((year.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
 dev.off()
 
+# add temp to same graph
+rh_all_fig <- ggplot(year_rh, aes(year, avg_rh)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey", size = 0.8) +
+  theme_minimal() +
+  ylim(70, 100) +
+  xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
+  labs(x = "Year", y = "Relative Humidity (%)") +
+  ggtitle("Average Relative Humidities 1941-2022") + 
+  annotate("text", x=2015, y=97, label = paste("p-value =", round((year.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=99, label = paste("Sen's Slope =", round((year.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+
+temp <- season_rh %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_temp = mean(monthly_average_temp)) # get yearly avg from monthly avg
+
+temp_fig <- ggplot(temp, aes(year, avg_temp)) + 
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey", size = 0.8) +
+  theme_minimal()
+
+print(temp_fig/rh_all_fig)
 ```
 
 
@@ -826,6 +855,7 @@ ff_annual_trends_all <- bind_rows(ff_annual_trend, ff_seasonal_trend)  %>%
   mutate(" " = ifelse(is.na(season), "Annual", as.character(season)), 
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Decadal trend (%)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "Decadal trend (%)" = ifelse(p <= 0.1, str_c(decadal_trend, "\u2020"), decadal_trend), # add dagger
          "p-value" = p) %>% 
   dplyr::select(" ", "Decadal trend (%)") %>% 
   distinct() %>%   # removes rows with repeat values
@@ -834,7 +864,7 @@ ff_annual_trends_all <- bind_rows(ff_annual_trend, ff_seasonal_trend)  %>%
 
 ff_table <- ff_annual_trends_all %>% 
   kbl(caption = "Decadal Trends of Fog Frequency from 1941-2022") %>%
-  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual fog frequency trends")) %>% 
+  footnote(general = c("\u2020 indicates 90% confidence", "*indicates 95% confidence", "Sen's Slope analysis used to calculate annual fog frequency trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria")  
 
 save_kable(ff_table, file = "Figures/ff_table.pdf")
@@ -919,5 +949,6 @@ rh_table <- annual_trends_all %>%
 save_kable(rh_table, file = "Figures/humidity_table.pdf")
 
 ```
+
 
 
