@@ -97,12 +97,12 @@ ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
-  ylim(20, 33) +
+  ylim(-5, 5) +
   xlim(1941, 2022) + # select only years after 1941 for continuity with wind data
   labs(x = "Year", y = "Temperature °C") +
   ggtitle("Average Temperatures 1941-2022") + 
-  annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+  annotate("text", x=2015, y=3, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=4, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
 dev.off()
 
 # annual: 1981 - 2022
@@ -114,12 +114,12 @@ ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
-  ylim(20, 33) +
+  ylim(-5, 5) +
   xlim(1981, 2022) +
   labs(x = "Year", y = "Temperature °C") +
   ggtitle("Average Temperatures 1981-2022") + 
-  annotate("text", x=2015, y=24, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=25, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
+  annotate("text", x=2015, y=3, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=4, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
 dev.off()
 
 # monthly: 1941 - 2022
@@ -174,4 +174,37 @@ temp_table <- annual_trends_all %>%
 save_kable(temp_table, file = "Figures/temperature_table.pdf")
 ```
 
+# Min and max
+```{r}
+# caluclate min and max from hourly temperature
+min_max <- hourly_temp %>% 
+  mutate(day = date(date)) %>% 
+  group_by(day) %>% 
+  summarise(minimum = min(temperature), 
+            maximum = max(temperature)) %>% 
+  group_by(month = month(day), year = year(day)) %>% 
+  summarize(avg_min = mean(minimum), 
+            avg_max = mean (maximum)) %>% 
+  group_by(year) %>% 
+  summarize(avg_min = mean(avg_min), 
+            avg_max = mean (avg_max)) 
+  
+# figures
+ggplot() +
+  geom_point(min_max, mapping = aes(year, avg_min), color = "lightblue3") +
+  geom_point(yearly_avg_t, mapping = aes(year, yearly_avg), color = "lightblue4") + 
+  geom_point(min_max, mapping = aes(year, avg_max), color = "pink3") + 
+  theme_minimal() +
+  geom_smooth(min_max, mapping = aes(year, avg_min), method = "lm", se = F, color = "grey", size = 0.5) +
+  geom_smooth(yearly_avg_t, mapping = aes(year, yearly_avg), method = "lm", se = F, color = "grey", size = 0.5) +
+  geom_smooth(min_max, mapping = aes(year, avg_max), method = "lm", se = F, color = "grey", size = 0.5) 
+  
+
+ggplot(min_max, aes(year, avg_max)) +
+  geom_point() 
+
+
+
+
+```
 
