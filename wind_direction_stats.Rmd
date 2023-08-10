@@ -52,14 +52,14 @@ hourly_dir <- hourly_direction %>%
                                         wind_direction == "W" ~ "W",
                                         wind_direction == "NW" ~ "NW", 
                                         wind_direction == "00" ~ "N")) %>%
-    dir_degree = case_when(simple_direction == "N" ~ 0,
+  mutate(dir_degree = case_when(simple_direction == "N" ~ 0,
                          simple_direction == "NE" ~ 45,
                          simple_direction == "E" ~ 90,
                          simple_direction == "SE" ~ 135,
                          simple_direction == "S" ~ 180,
                          simple_direction == "SW" ~ 225,
                          simple_direction == "W" ~ 270,
-                         simple_direction == "NW" ~ 315) %>%
+                         simple_direction == "NW" ~ 315)) %>%
   rename(dir_compass = simple_direction) %>%
   select(date, dir_compass, dir_degree, wind_speed, era) %>%
   mutate(year = year(date), 
