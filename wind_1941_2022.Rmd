@@ -126,10 +126,10 @@ homogenized_seasonal <- seasonal_avg %>%
 
 #yearly average, with homogenization pre-1981
 yearly_avg <- daily_avg %>%
-  group_by(month, year) %>%
+  group_by(month, year, era) %>%
   mutate(monthly_avg_wind = mean(wind_speed)) %>% 
-  group_by(year, era = era) %>%
-  mutate(wind_speed = mean(monthly_avg_wind), 
+  group_by(year, era) %>%
+  summarize(wind_speed = mean(monthly_avg_wind), 
             .groups="drop") %>%
   na.omit() %>% 
   mutate(homogenized_wind = ifelse(era == "era1", wind_speed*1.05, wind_speed), 
@@ -187,7 +187,7 @@ year_plot_homogenized <- ggplot(data = yearly_avg, aes(x = year,
   labs (x = "Year", y = "Wind Speed (mph)", title="B. Homogenized") +
  # theme_classic() +
   theme(legend.position = "none") +
-  geom_vline(xintercept=1981, 
+  geom_vline(xintercept=1980, 
              linetype="dotted")
 
 year_plot <- ggplot(data = yearly_avg, aes(x = year, 
@@ -197,7 +197,7 @@ year_plot <- ggplot(data = yearly_avg, aes(x = year,
   labs (x = "Year", y = "Wind Speed (mph)", title="A. Raw Data") +
   #theme_classic() +
   theme(legend.position = "none") +
-  geom_vline(xintercept=1981, 
+  geom_vline(xintercept=1980, 
              linetype="dotted")
 
 yearly_winds <- year_plot + year_plot_homogenized 
@@ -256,24 +256,24 @@ annual.sen<- sens.slope(yearly_avg$homogenized_wind, conf.level = 0.95)
 #View(annual.sen)
 
 #monthly:
-#monthly.sen<-sens.slope(monthly_avg$homogenized_wind, conf.level = 0.95)
+monthly.sen<-sens.slope(monthly_avg$homogenized_wind, conf.level = 0.95)
 #View(monthly.sen)
 
 #seasonal sens
 #winter
-#winter.sen<-sens.slope(winter$homogenized_wind, conf.level = 0.95)
+winter.sen<-sens.slope(winter$homogenized_wind, conf.level = 0.95)
 #View(winter.sen)
 
 #spring
-#spring.sen<-sens.slope(spring$homogenized_wind, conf.level = 0.95)
+spring.sen<-sens.slope(spring$homogenized_wind, conf.level = 0.95)
 #View(spring.sen)
 
 #summer
-#summer.sen<-sens.slope(summer$homogenized_wind, conf.level = 0.95)
+summer.sen<-sens.slope(summer$homogenized_wind, conf.level = 0.95)
 #View(summer.sen)
 
 #fall
-#fall.sen<-sens.slope(fall$homogenized_wind, conf.level = 0.95)
+fall.sen<-sens.slope(fall$homogenized_wind, conf.level = 0.95)
 #View(fall.sen)
 
 ```
@@ -328,7 +328,7 @@ trends_all_81 <- rbind(annual_trend_81, seasonal_trends_81) %>%
 
 
 wind_table_81 <- trends_all_81 %>% 
-  kbl(caption = "Decadal Trends of Wind Speeds from 1981-2022") %>%
+  kbl(caption = "Decadal Trends of Wind Speeds 1981-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind speed trends")) %>%   kable_classic(full_width = F, html_font = "Cambria")  
 
 save_kable(wind_table_81, file = "Figures/wind_table_81.pdf")
