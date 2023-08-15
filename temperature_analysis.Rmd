@@ -91,9 +91,9 @@ yearly_avg_t <- monthly_avg_t %>%
 # Analysis
 ```{r}
 # annual: 1941 - 2022
-pdf(file = "Figures/temp_annual_1941.pdf", width = 8, height = 5)
+
 annual.sen <- sens.slope(yearly_avg_t$yearly_avg)
-ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
+temp_annual_1941 <- ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
@@ -103,14 +103,14 @@ ggplot(yearly_avg_t, aes(x = year, y = yearly_avg)) +
   ggtitle("Average Temperatures 1941-2022") + 
   annotate("text", x=2015, y=3, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=4, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
-dev.off()
+
+ggsave("Figures/temp_annual_1941.jpeg", plot = temp_annual_1941, width = 8, height = 5, dpi = 1000)
 
 # annual: 1981 - 2022
-pdf(file = "Figures/temp_annual_1981.pdf", width = 8, height = 5)
 yearly_avg_t_81 <-  yearly_avg_t %>% 
   filter(year >= 1981) 
 annual.sen <- sens.slope(yearly_avg_t_81$yearly_avg)
-ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
+temp_annual_1981 <- ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
   geom_point() +
   geom_smooth(method = "lm", se = F, color = "grey") +
   theme_minimal() +
@@ -120,7 +120,8 @@ ggplot(yearly_avg_t_81, aes(x = year, y = yearly_avg)) +
   ggtitle("Average Temperatures 1981-2022") + 
   annotate("text", x=2015, y=3, label = paste("p-value =", round((annual.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=4, label = paste("Sen's Slope =", round((annual.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
-dev.off()
+
+ggsave("Figures/temp_annual_1981.jpeg", plot = temp_annual_1981, width = 8, height = 5, dpi = 1000)
 
 # monthly: 1941 - 2022
 ggplot(monthly_avg_t, aes(x = year, y = month_avg)) + geom_point() + geom_smooth(method = "lm", se = F) + facet_wrap(~month)
@@ -189,6 +190,12 @@ min_max <- hourly_temp %>%
   summarize(avg_min = mean(avg_min), 
             avg_max = mean (avg_max)) 
   
+# Sen's slopes
+min.sen <- sens.slope(min_max$avg_min, conf.level = 0.95)
+max.sen <- sens.slope(min_max$avg_max, conf.level = 0.95)
+avg.sen <- sens.slope(yearly_avg_t$yearly_avg, conf.level = 0.95)
+
+
 # figures
 ggplot() +
   geom_point(min_max, mapping = aes(year, avg_min), color = "lightblue3") +
@@ -201,7 +208,9 @@ ggplot() +
   
 
 ggplot(min_max, aes(year, avg_max)) +
-  geom_point() 
+  geom_point() + 
+  geom_smooth(method = "lm", se = F)
+
 
 
 
