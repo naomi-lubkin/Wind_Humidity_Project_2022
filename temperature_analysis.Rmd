@@ -189,30 +189,43 @@ min_max <- hourly_temp %>%
   group_by(year) %>% 
   summarize(avg_min = mean(avg_min), 
             avg_max = mean (avg_max)) 
-  
+min <- min_max %>% 
+  select(year, avg_min) %>% 
+  mutate(datatype = "Minimum", avg = avg_min)
+max <- min_max %>% 
+  select(year, avg_max) %>% 
+  mutate(datatype = "Maximum", avg = avg_max)
+avg <- yearly_avg_t %>% 
+  select(year, yearly_avg) %>% 
+  mutate(datatype = "Average", avg = yearly_avg)
+
+min_max_avg <- bind_rows(min, max, avg) %>% 
+  select(year, avg, datatype) %>% 
+  mutate(datatype = factor(datatype, levels = c("Maximum", "Average", "Minimum")))
+
 # Sen's slopes
-min.sen <- sens.slope(min_max$avg_min, conf.level = 0.95)
-max.sen <- sens.slope(min_max$avg_max, conf.level = 0.95)
-avg.sen <- sens.slope(yearly_avg_t$yearly_avg, conf.level = 0.95)
+min.sen <- sens.slope(min_max_avg$avg_min, conf.level = 0.95)
+max.sen <- sens.slope(min_max_avg$avg_max, conf.level = 0.95)
+avg.sen <- sens.slope(min_max_avg$yearly_avg, conf.level = 0.95)
 
 
 # figures
-ggplot() +
-  geom_point(min_max, mapping = aes(year, avg_min), color = "lightblue3") +
-  geom_point(yearly_avg_t, mapping = aes(year, yearly_avg), color = "lightblue4") + 
-  geom_point(min_max, mapping = aes(year, avg_max), color = "pink3") + 
+temp_min_max <- ggplot(min_max_avg, aes(year, avg, color = datatype)) +
+  geom_line() +
   theme_minimal() +
-  geom_smooth(min_max, mapping = aes(year, avg_min), method = "lm", se = F, color = "grey", size = 0.5) +
-  geom_smooth(yearly_avg_t, mapping = aes(year, yearly_avg), method = "lm", se = F, color = "grey", size = 0.5) +
-  geom_smooth(min_max, mapping = aes(year, avg_max), method = "lm", se = F, color = "grey", size = 0.5) 
-  
+  geom_smooth(min_max, mapping = aes(year, avg_min), method = "lm", se = F, color = "grey", size = 0.5) + # min
+  geom_smooth(yearly_avg_t, mapping = aes(year, yearly_avg), method = "lm", se = F, color = "grey", size = 0.5) + # avg
+  geom_smooth(min_max, mapping = aes(year, avg_max), method = "lm", se = F, color = "grey", size = 0.5) + # max
+  scale_color_manual(values = c("darkred", "orange", "lightblue3")) +
+  annotate("text", x=1955, y=-4.5, label = paste("p-value =", round((min.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=1955, y=-4, label = paste("Sen's Slope =", round((min.sen[["estimates"]][["Sen's slope"]]), digits = 3))) + # min
+  annotate("text", x=1955, y=-1.5, label = paste("p-value =", round((avg.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=1955, y=-1, label = paste("Sen's Slope =", round((avg.sen[["estimates"]][["Sen's slope"]]), digits = 3))) + # avg
+  annotate("text", x=1955, y=2.5, label = paste("p-value =", round((max.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=1955, y=3, label = paste("Sen's Slope =", round((max.sen[["estimates"]][["Sen's slope"]]), digits = 3))) + # max
+  labs(title = "Annual Temperature (°C) trends from 1941-2022", x = "Year", y = "Temperature (°C)") 
 
-ggplot(min_max, aes(year, avg_max)) +
-  geom_point() + 
-  geom_smooth(method = "lm", se = F)
-
-
-
+ggsave(plot = temp_min_max, filename = "Figures/temp_min_max.jpeg", width = 8, height = 5, dpi = 1000)
 
 
 ```

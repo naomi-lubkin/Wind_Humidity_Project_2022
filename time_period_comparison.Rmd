@@ -132,7 +132,7 @@ homogen("wind", 1941, 2021)
 
 ##Standard normal homogeneity test
 ```{r}
-snht_yearly <- snht(yearly_avg$yearly_avg_speed, 80, robust=F, time=NULL)
+snht_yearly <- snht(yearly_avg$year_avg_speed, 80, robust=F, time=NULL)
 ```
 
 ##Manual homogenization 
