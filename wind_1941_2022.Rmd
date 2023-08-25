@@ -139,37 +139,27 @@ yearly_avg <- daily_avg %>%
                             TRUE ~ NA_character_))
 
 ## 1941 - 2022 Averages
-
-#overall
-yearly_avg %>% 
+avgs_1941 <- rbind(yearly_avg %>% 
   ungroup() %>% 
-  filter(era == "era1" | era == "era2") %>% 
-  summarize(avg = mean(homogenized_wind))
-
-#seasonal
-homogenized_seasonal %>% 
+  summarize(avg = mean(homogenized_wind), season = "Annual"),
+  homogenized_seasonal %>% 
   ungroup() %>% 
-  filter(era == "era1" | era =="era2") %>% 
   group_by(season) %>% 
-  summarize(avg = mean(monthly_avg_wind))
+  summarize(avg = mean(monthly_avg_wind)))
 
 
 
 ## 1981 - 2022 Averages
-
-#overall
-yearly_avg %>% 
+avgs_1981 <- rbind(yearly_avg %>% 
   ungroup() %>% 
-  filter(era == "era2") %>% 
-  summarize(avg = mean(homogenized_wind))
-
-
-#seasonal
-homogenized_seasonal %>% 
+  filter(year>1980) %>% 
+  summarize(avg = mean(homogenized_wind), season = "Annual"),
+  homogenized_seasonal %>% 
   ungroup() %>% 
-  filter(era == "era2") %>% 
+  filter(year>1980) %>% 
   group_by(season) %>% 
-  summarize(avg = mean(monthly_avg_wind))
+  summarize(avg = mean(monthly_avg_wind)))
+t.test(homogenized_wind ~ era, data = yearly_avg)
 
 ```
 
