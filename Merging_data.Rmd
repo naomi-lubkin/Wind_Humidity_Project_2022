@@ -347,8 +347,8 @@ mph60_41 <- ggplot(counts_final60_41_sum, aes(year, total_events_yr)) +
   geom_point() +
   theme_minimal() +
   labs(x = 'Year', y = "Number of Events", title = "Number of Events at 60 mph Threshold", subtitle = "1941-2022") +
-  annotate("text", x=2015, y=17, label = paste("p-value =", round((t60.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=18, label = paste("Sen's Slope =", round(t60.sen[["estimates"]][["Sen's slope"]], digits = 3)))
+  annotate("text", x=2015, y=175, label = paste("p-value =", round((t60.sen[["p.value"]]), digits = 3))) +
+  annotate("text", x=2015, y=185, label = paste("Sen's Slope =", round(t60.sen[["estimates"]][["Sen's slope"]], digits = 3)))
 mph60_41
 dev.off()
 
@@ -432,8 +432,7 @@ dev.off()
 
 all_threshold_1941 <- mph25_41 / mph60_41 / mph100_41
 
-  ggsave("Figures/all_threshold_1941.jpeg", plot = all_threshold_1941, width = 8, height = 5, dpi = 1000)
-
+ggsave("Figures/all_threshold_1941.jpeg", plot = all_threshold_1941, width = 8, height = 10, dpi = 1000)
 
 ```
 
