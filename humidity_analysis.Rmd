@@ -776,7 +776,7 @@ dev.off()
 
 # Fog frequency
 ```{r}
-# Fog frequency by season: all days 1935-2022
+# Fog frequency by season: all days 1941-2022
 ff_seasonal <- season_rh %>% 
   group_by(season, Class) %>% 
   summarise(n_class = n()) %>% # get number of fog and clear days
