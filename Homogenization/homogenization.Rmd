@@ -8,7 +8,6 @@ Attempt at homogenization of 1940-2021 MWO wind speed data
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends/Homogenization")
 library(tidyverse)
 library(climatol)
 library(snht)
@@ -36,16 +35,32 @@ wind_spd <- monthly_avg %>%
   rename(wind = monthly_avg_spd)
 
 #for hourly data
-hourly_avg <- read_csv("b16-hourly wind 1935-2021.csv")
+hourly_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly wind 1935-2021.csv")
 hourly_avg <- hourly_avg %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
   filter(year(date)>=1941) 
 
 #daily averages
-daily_avg <- read_csv("b16-hourly daily wind average 1935-2021.csv")
+daily_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly daily wind average 1935-2021.csv")
 daily_avg<- daily_avg %>%
   mutate(wind_speed = as.numeric(daily_avg_speed)) %>%
   filter(year(date)>=1941)
+```
+```{r}
+monthly_avg %>% 
+ggplot(aes(x = year(date), y = monthly_avg_speed)) +
+  geom_point() + 
+  geom_hline(slope = 0, yintercept = 34.340971) +
+  geom_hline(slope = 0, yintercept = 35.2815)
+  
+
+monthly_avg %>% 
+  filter(year(date) <= 1980) %>% 
+  summarize(mean = mean(monthly_avg_speed))
+monthly_avg %>% 
+  filter(year(date) > 1980) %>% 
+  summarize(mean = mean(monthly_avg_speed))
+
 ```
 
 
@@ -62,7 +77,7 @@ NAME <- c("OBS", "SATOWER")
 df <- data.frame(X, Y, Z, CODE, NAME)
 write.table(df, file = 'wind_1941-2021.est', sep=" ", col.names = FALSE, row.names = FALSE)
 
-homogen("wind", 1941, 2021)
+homogen("wind", 1941, 2021, nm = 12, std = 2)
 ```
 
 
@@ -77,11 +92,28 @@ snht_plot <- plotSNHT(wind_spd$wind, wind_snht_monthly, time = NULL, alpha = 0.0
 #period is hours before aug 1 1981
 #gets the error: Period is too large to compute statistics
 wind_snht_hourly <- snht(hourly_avg$wind_speed, period = 355729, robust = FALSE, time = NULL)
+hist(hourly_avg$wind_speed)
 
 #SNHT with daily averages
-\#period is days before aug 1 1981
+#period is days before aug 1 1981
 wind_snht_daily <- snht(daily_avg$wind_speed, period = 14609, robust = FALSE, time = NULL)
 summary(wind_snht_daily)
 snht_plot_daily <- plotSNHT(daily_avg$wind_speed, wind_snht_daily, time=NULL, alpha = 0.05)
 ```
+
+```{r}
+#Transforming data with square root
+daily_avg_transformed <- daily_avg %>% 
+  mutate(wind_speed_transformed = wind_speed^(1/1.7)) %>%  #square root transformation
+  na.omit() %>% 
+  group_by(date(date)) %>% 
+  summarize(avg_daily_transformed = mean(wind_speed_transformed))
+
+hist(daily_avg_transformed$avg_daily_transformed)
+
+#period is before June 1, 1980
+summary(snht(daily_avg_transformed$avg_daily_transformed, period = 14381))
+
+```
+
 
