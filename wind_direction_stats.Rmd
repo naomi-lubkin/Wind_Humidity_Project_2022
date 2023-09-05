@@ -16,6 +16,9 @@ library(ggplot2)
 #Data: Loading in and cleaning
 ```{r}
 hourly_direction <- read_csv("Data/b16-hourly wind speed plus direction 1935-2021.csv")
+wind_2022 <- read_csv("Data/2022_wind.csv") %>%
+  select(date, wind_speed, wind_direction)
+hourly_direction <- rbind(hourly_direction, wind_2022)
 
 
 date1 <- ymd_hms("1970-05-04 00:55:00")
@@ -26,7 +29,8 @@ era1_end <- ymd_hms("1980-05-30 23:55:00")
 era2_start <- ymd_hms("1980-09-01 00:55:00")
 era2_end <- ymd_hms("2022-12-31 23:55:00")
 
-#homogonizing directions to 8 cardinal directions (first ~20 years have 16), then switching cardinal directions to degrees. Excluding May4-July 7 1970 (wind data taken from temporary location) and summer 1980 (switch to Sherman Adams Building occurred sometime in summer, but not sure when, so the whole season is excluded for simplicity)
+#homogenizing directions to 8 cardinal directions (first ~20 years have 16), then switching cardinal directions to degrees. Excluding May4-July 7 1970 (wind data taken from temporary location) and summer 1980 (switch to Sherman Adams Building occurred sometime in summer, but not sure when, so the whole season is excluded for simplicity)
+#"V" wind direction data points (="variable") are suspect (Jay Broccolo, personal correspondence) so are excluded. "00" wind directions are from hours with very low wind, so are also excluded. 
 
 hourly_dir <- hourly_direction %>%
   #mutate(date = as.POSIXct(date)) %>%
@@ -35,7 +39,7 @@ hourly_dir <- hourly_direction %>%
   mutate(era = ifelse(date %within% interval(date1, date2), NA, 
            ifelse(date %within% interval(era1_start, era1_end),"era1", 
                              ifelse(date %within% interval(era2_start, era2_end), "era2", NA)))) %>%
-  mutate(simple_direction =  case_when( wind_direction == "WSW" ~ "SW", 
+ mutate(simple_direction =  case_when( wind_direction == "WSW" ~ "SW", 
                                         wind_direction == "WNW" ~ "NW", 
                                         wind_direction == "NNW" ~ "NW",
                                         wind_direction == "NNE" ~ "NE",
@@ -51,8 +55,9 @@ hourly_dir <- hourly_direction %>%
                                         wind_direction == "SW" ~ "SW",
                                         wind_direction == "W" ~ "W",
                                         wind_direction == "NW" ~ "NW", 
-                                        wind_direction == "00" ~ "N")) %>%
-  mutate(dir_degree = case_when(simple_direction == "N" ~ 0,
+                                        wind_direction == "00" ~ NA, 
+                                        wind_direction == "V" ~ NA)) %>%
+    mutate(dir_degree = case_when(simple_direction == "N" ~ 0,
                          simple_direction == "NE" ~ 45,
                          simple_direction == "E" ~ 90,
                          simple_direction == "SE" ~ 135,
@@ -76,9 +81,23 @@ hourly_dir <- hourly_direction %>%
                             month == 8 ~ "Summer",
                             month == 9  ~ "Fall", 
                             month == 10  ~ "Fall", 
-                            month == 11  ~ "Fall"))
+                            month == 11  ~ "Fall")) %>%
+  mutate(decade = floor_date(date, years(10))) 
 
 
+
+wind_counts <- hourly_dir %>%
+  group_by(dir_compass, year) %>%
+  summarise(diryear_count=n(),
+            .groups = 'drop') %>%
+  group_by(year) %>%
+  mutate(yeartotal_count = sum(diryear_count),
+         prop = (diryear_count/yeartotal_count))
+
+
+
+westerly_wind_prop <- wind_counts %>%
+  filter(dir_compass == "W")
 
 
 ```
@@ -92,9 +111,20 @@ t.test(dir_degree ~ era, data = hourly_dir, var.equal = TRUE)
 #era1: 240.9760          era2: 236.9551 
 
 # ANOVA: wind direction and season
-wind.dir.anova <- aov(dir_degree ~ era * season, data = hourly_dir)
+wind.dir.anova <- aov(dir_degree ~ season, data = hourly_dir)
 summary(wind.dir.anova)
 TukeyHSD(wind.dir.anova)
+
+# ANOVA: wind direction and decade
+wind.dir.decade.anova <- aov(dir_degree ~ decade, data = hourly_dir)
+summary(wind.dir.decade.anova)
+
+# ANOVA: wind direction and season, decade
+wind.dir.seasondecade.anova <- aov(dir_degree ~ decade * season, data = hourly_dir)
+summary(wind.dir.seasondecade.anova)
+TukeyHSD(winpd.dir.seasondecade.anova)
+
+
 ```
 
 #Plot
@@ -105,5 +135,14 @@ ggplot(data = hourly_dir, aes(x = date, y = dir_degree)) +
 test_plot<- ggplot(data = hourly_dir, aes(x = date, y = dir_compass)) +
   geom_point() +
   facet_wrap(~era)
+
+ggplot(data = hourly_dir, aes(x=decade, y = dir_degree)) +
+  geom_count() +
+  scale_size_area(max_size =10)
+
+ggplot(data = wind_counts, aes(x=year, y = prop)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~dir_compass)
+
 ```
 
