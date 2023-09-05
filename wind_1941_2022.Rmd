@@ -159,7 +159,9 @@ avgs_1981 <- rbind(yearly_avg %>%
   filter(year>1980) %>% 
   group_by(season) %>% 
   summarize(avg = mean(monthly_avg_wind)))
-t.test(homogenized_wind ~ era, data = yearly_avg)
+
+
+t.test(wind_speed ~ era, data = yearly_avg)
 
 ```
 

@@ -13,7 +13,7 @@ were housed on the top of the Sherman Adams Building tower.
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
-setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
+#setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
 library(here)
 here::here()
 library(lubridate)
@@ -81,10 +81,10 @@ all_data_yearly <- yearly_avg %>%
 ######################################################################################
 #doing a shapiro wilk test to test for normality 
 #on all data (1941-2021 daily average wind speeds)
-shapiro.test(all_data$monthly_avg_spd)
-hist(all_data$monthly_avg_spd)
+shapiro.test(all_data_monthly$monthly_avg_spd)
+hist(all_data_monthly$monthly_avg_spd)
 #p-value = 1.359e-11 (less than 0.05, cannot assume normality )
-#tryed various transofmrations, none I tried (log, square, cube) really helped
+#tried various transfomrations, none I tried (log, square, cube) really helped
 #I think because the sample size is so big I can violate this assumption? 
 
 #t-test between the two time periods
