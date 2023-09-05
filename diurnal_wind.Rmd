@@ -1,0 +1,146 @@
+---
+title: "Winter Diurnal Wind Analysis"
+author: "Naomi Lubkin"
+date: "2023-08-22"
+output: html_document
+---
+Diurnal wind speed and direction analysis for winter months (DJF), to compare winds between day and night. 
+Cutoff between day and night: day is 6am-6pm, night is 6pm-6am
+Data from 1941-2022
+
+#loading in packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+#loading in and cleaning data 
+```{r}
+#data
+wind_2022 <- read_csv("Data/2022_wind.csv") %>%
+  select(date, wind_speed)
+hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
+rbind(hourly_wind, wind_2022)
+
+hourly_direction <- read_csv("Data/b16-hourly wind speed plus direction 1935-2021.csv")
+wind_2022_dir <- read_csv("Data/2022_wind.csv") %>%
+  select(date, wind_speed, wind_direction)
+rbind(hourly_direction, wind_2022_dir)
+
+#WIND SPEED
+#hourly wind speed data, 1941-2022
+#removing dates when wind observations were being switched (summer 1980) and taken in temp location (may-july 1970)
+date1 <- ymd_hms("1970-05-04 00:55:00")
+date2 <- ymd_hms("1970-07-09 23:55:00")
+
+era1_start <- ymd_hms("1941-01-01 00:55:00")
+era1_end <- ymd_hms("1980-05-30 23:55:00")
+era2_start <- ymd_hms("1980-09-01 00:55:00")
+era2_end <- ymd_hms("2022-12-31 23:55:00")
+
+#wind speed: winter 1941-2022, day vs. night
+speed <- hourly_wind %>%
+  mutate(era = ifelse(date %within% interval(date1, date2), NA, 
+           ifelse(date %within% interval(era1_start, era1_end),"era1", 
+                             ifelse(date %within% interval(era2_start, era2_end), "era2", NA)))) %>%
+  mutate(wind_speed = as.numeric(wind_speed)) %>%
+  mutate(wind_speed = case_when(wind_speed >= 0 ~ wind_speed,
+                                wind_speed == "NULL" ~ NA)) %>% 
+  na.omit() %>%
+  mutate(time = hour(date) + 1) %>%
+  mutate(day_status = case_when (time >= 1 & time<6 ~"night", 
+                                 time >=6 & time<18 ~"day", 
+                                 time >= 18 ~ "night")) %>%
+  mutate(month = month(date), 
+         year = year(date)) %>%
+  filter(month == 12 | month == 1 | month== 2) %>%
+  group_by(month, year, day_status) %>%
+  summarise(avg_wind = mean(wind_speed), 
+            .groups = 'drop') %>%
+  as.data.frame()
+  
+
+#wind direction: winter 1941-2022, day vs. night
+direction <- hourly_direction %>%
+  mutate(era = ifelse(date %within% interval(date1, date2), NA, 
+           ifelse(date %within% interval(era1_start, era1_end),"era1", 
+                             ifelse(date %within% interval(era2_start, era2_end), "era2", NA)))) %>%
+ mutate(simple_direction =  case_when( wind_direction == "WSW" ~ "SW", 
+                                        wind_direction == "WNW" ~ "NW", 
+                                        wind_direction == "NNW" ~ "NW",
+                                        wind_direction == "NNE" ~ "NE",
+                                        wind_direction == "ENE" ~ "NE",
+                                        wind_direction == "ESE" ~ "SE",
+                                        wind_direction == "SSE" ~ "SE",
+                                        wind_direction == "SSW" ~ "SW", 
+                                        wind_direction == "N" ~ "N",
+                                        wind_direction == "NE" ~ "NE",
+                                        wind_direction == "E" ~ "E",
+                                        wind_direction == "SE" ~ "SE",
+                                        wind_direction == "S" ~ "S",
+                                        wind_direction == "SW" ~ "SW",
+                                        wind_direction == "W" ~ "W",
+                                        wind_direction == "NW" ~ "NW", 
+                                        wind_direction == "00" ~ NA, 
+                                        wind_direction == "V" ~ NA)) %>%
+    mutate(dir_degree = case_when(simple_direction == "N" ~ 0,
+                         simple_direction == "NE" ~ 45,
+                         simple_direction == "E" ~ 90,
+                         simple_direction == "SE" ~ 135,
+                         simple_direction == "S" ~ 180,
+                         simple_direction == "SW" ~ 225,
+                         simple_direction == "W" ~ 270,
+                         simple_direction == "NW" ~ 315)) %>%
+  rename(dir_compass = simple_direction) %>%
+  select(date, dir_compass, dir_degree, wind_speed, era) %>%
+  mutate(year = year(date), 
+         month = month(date)) %>%
+  filter(year >= 1941) %>%
+  na.omit() %>%
+  mutate(time = hour(date) + 1) %>%
+  mutate(day_status = case_when (time >= 1 & time<6 ~"night", 
+                                 time >=6 & time<18 ~"day", 
+                                 time >= 18 ~ "night")) %>%
+  filter(month == 12 | month == 1 | month== 2)
+
+
+
+
+#counts and proportions for wind direction
+wind_counts <- direction %>%
+  group_by(dir_compass, year, day_status) %>%
+  summarise(diryear_count=n(),
+            .groups = 'drop') %>%
+  group_by(year) %>%
+  mutate(yeartotal_count = sum(diryear_count),
+         prop = (diryear_count/yeartotal_count))
+
+```
+
+#Wind speed analysis
+```{r}
+#stats
+#t-test between day and night
+t.test(avg_wind ~ day_status, data = speed, var.equal=TRUE)
+
+#anova with day and night and year
+speed.lm <- lm(avg_wind ~ day_status + year, data = speed)
+summary(speed.lm)
+
+#plot
+ggplot(data = speed, aes(x=year, y = avg_wind)) +
+  geom_point()+
+  facet_wrap(~day_status) +
+  ylim(0, 60)
+```
+
+#Wind direction analysis
+```{r}
+t.test(prop ~ day_status, data = wind_counts)
+
+ggplot(data = wind_counts, aes(x=year, y = prop)) +
+  geom_bar(stat="identity", position = "dodge") +
+  facet_wrap(day_status~dir_compass, nrow=8, ncol=2)
+
+```
+
