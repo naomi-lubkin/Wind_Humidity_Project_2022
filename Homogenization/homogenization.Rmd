@@ -138,6 +138,10 @@ hourly_avg_1941 <- hourly_avg_1941 %>%
 hourly_avg_1981 <- hourly_avg_1981 %>% 
   mutate(homogenized_wind = wind_speed)
 homogenized <- rbind(hourly_avg_1941, hourly_avg_1981)
+
+
+# exporting homogenized data
+write.csv(homogenized, file = "wind_1941_2022_homogenized.csv")
   
 ```
 
