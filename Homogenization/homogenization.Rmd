@@ -18,34 +18,36 @@ library(boot)
 
 #Loading in data/making dataframes
 ```{r}
-#for monthly data
+#for monthly data (doesn't include 2022)
 #b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
-monthly_avg <- read_csv("b16-hourly monthly wind average 1935-2021.csv")
-
-#cleaning data
-monthly_avg <- monthly_avg %>%
-  mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
-         monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
-         date = as.Date(date), 
-         month = month(date), 
-         year =year(date)) 
-
-wind_spd <- monthly_avg %>%
-  filter(year>=1941) %>% 
-  dplyr::select(monthly_avg_spd) %>% 
-  rename(wind = monthly_avg_spd)
+#monthly_avg <- read_csv("b16-hourly monthly wind average 1935-2021.csv")
+#
+# #cleaning data 
+# monthly_avg <- monthly_avg %>%
+#   mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
+#          monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
+#          date = as.Date(date), 
+#          month = month(date), 
+#          year =year(date)) 
+# 
+# wind_spd <- monthly_avg %>%
+#   filter(year>=1941) %>% 
+#   dplyr::select(monthly_avg_spd) %>% 
+#   rename(wind = monthly_avg_spd)
 
 #for hourly data
-hourly_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly wind 1935-2021.csv")
+hourly_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/wind_from_wind_1941_2022_rmd.csv")
 hourly_avg <- hourly_avg %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
-  filter(year(date)>=1941) 
+  filter(year(date)>=1941) %>% 
+  dplyr::select(date, wind_speed)
+  
 
-#daily averages
-daily_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly daily wind average 1935-2021.csv")
-daily_avg<- daily_avg %>%
-  mutate(wind_speed = as.numeric(daily_avg_speed)) %>%
-  filter(year(date)>=1941)
+# #daily averages (doesn't include 2022)
+# daily_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly daily wind average 1935-2021.csv")
+# daily_avg<- daily_avg %>%
+#   mutate(wind_speed = as.numeric(daily_avg_speed)) %>%
+#   filter(year(date)>=1941)
 ```
 
 
@@ -121,20 +123,18 @@ means <- function(d, i) {
 # boot averages: 1941 - 1980
 reps_41 <- boot(hourly_avg_1941, means, R = 100)
 plot(reps_41)
-# 33.33738
 
 # boot averages: 1981 - 2022
 reps_81 <- boot(hourly_avg_1981, means, R = 100)
 plot(reps_81)
-# 35.23247
 
 # ratio
-35.23247/33.33738
-# 1.056846
+reps_81$t0/reps_41$t0
+
 
 # homogenize and recombine 
 hourly_avg_1941 <- hourly_avg_1941 %>% 
-  mutate(homogenized_wind = wind_speed * 1.056846) # homogenize by multiplying first era by 1.05
+  mutate(homogenized_wind = wind_speed * 1.056282) # homogenize by multiplying first era by 1.05
 hourly_avg_1981 <- hourly_avg_1981 %>% 
   mutate(homogenized_wind = wind_speed)
 homogenized <- rbind(hourly_avg_1941, hourly_avg_1981)
@@ -160,12 +160,12 @@ diff.means <- function(d, f)
      ss2 <- sum(d[-gp1,1]^2 * f[-gp1]) - (m2 *  m2 * sum(f[-gp1]))
      c(m1 - m2, (ss1 + ss2)/(sum(f) - 2))
 }
-hourly_1 <- hourly_avg_h[as.numeric(hourly_avg_h[,2]) >= 1,]
 diff_means <- boot(hourly_avg_h, diff.means, R = 100, stype = "f", strata = as.vector(hourly_avg_h$series))
 plot(diff_means)
 
 # checking against the averages from above
-35.23247-1.913994
+reps_41$t0 - diff_means$t0[1] # mean from 41-80 period minus the difference in means
+reps_81$t0 # mean from 81-22 period
 ```
 
 
