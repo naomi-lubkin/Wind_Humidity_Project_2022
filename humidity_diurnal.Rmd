@@ -22,6 +22,8 @@ rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") %>%
   filter(year(date) >= 1941)
 ```
 
+
+# RH diurnal analysis
 ```{r}
 # times: 1:00 (night), 7:00 (day), 13:00 (day), 19:00 (night)
 
@@ -84,6 +86,7 @@ rh %>%
   ggplot(aes(x = hour, y = avg, color = season)) +
   geom_smooth() 
 
-
 ```
 
+
+# Fog Frequency diurnal analysis
