@@ -155,7 +155,6 @@ yearly_avg %>%
 #seasonal
 homogenized_seasonal %>% 
   filter(year >= 1941) %>% 
->>>>>>> 792c98cd771ada36bba55c2004cac4a2ac57a7af
   group_by(season) %>% 
   summarize(avg = mean(monthly_avg_wind)))
 
@@ -180,7 +179,6 @@ yearly_avg %>%
 #seasonal
 homogenized_seasonal %>% 
   filter(year >= 1981) %>% 
->>>>>>> 792c98cd771ada36bba55c2004cac4a2ac57a7af
   group_by(season) %>% 
   summarize(avg = mean(monthly_avg_wind)))
 
