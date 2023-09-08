@@ -134,7 +134,7 @@ reps_81$t0/reps_41$t0
 
 # homogenize and recombine 
 hourly_avg_1941 <- hourly_avg_1941 %>% 
-  mutate(homogenized_wind = wind_speed * 1.056282) # homogenize by multiplying first era by 1.05
+  mutate(homogenized_wind = wind_speed * 1.056) # homogenize by multiplying first era by 1.05
 hourly_avg_1981 <- hourly_avg_1981 %>% 
   mutate(homogenized_wind = wind_speed)
 homogenized <- rbind(hourly_avg_1941, hourly_avg_1981)
