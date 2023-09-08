@@ -49,12 +49,17 @@ rh <- rh %>%
                             month(date) == 10 ~ "Fall",
                             month(date) == 11 ~ "Fall"))
 
+# assessing data
+rh %>% 
+  ggplot(aes(RH, fill = tod)) +
+  geom_histogram(position = "dodge")
+
 # diurnal trends graph
 avg_hour <- rh %>% 
   group_by(season, year = year(date), hour = hour(date)) %>% 
   summarize(avg = mean(RH)) 
   
-ggplot(avg, aes(x = year, y = avg, color = as.factor(hour))) +
+ggplot(avg_hour, aes(x = year, y = avg, color = as.factor(hour))) +
   geom_smooth(method = "lm", se = F) +
   #geom_point()  +
   facet_wrap(~season)
@@ -68,18 +73,27 @@ ggplot(trends, aes(x= hour, y = trend, fill = season)) +
 
 
 avg_tod <- rh %>% 
+  mutate(season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
   group_by(season, year = year(date), tod) %>% 
-  summarize(avg = mean(RH)) 
+  summarize(avg = mean(RH))  
 
 # time of day trends plot
-trends <- avg_tod %>% 
+trends_rh <- avg_tod %>% 
   group_by(season, tod) %>% 
-  summarize(trend = sens.slope(avg, conf.level = 0.95)[["estimates"]][["Sen's slope"]])
-ggplot(trends, aes(x= tod, y = trend, fill = season)) +
-  geom_col(position = "dodge")
+  summarize(trend = sens.slope(avg, conf.level = 0.95)[["estimates"]][["Sen's slope"]], 
+            p = sens.slope(avg, conf.level = 0.95)[["p.value"]]) %>% 
+  mutate(sig = ifelse(p <= 0.05, "Y", "N"))
+
+rh_day_night <- ggplot(trends_rh, aes(x= tod, y = trend, fill = season)) +
+  geom_col(position = "dodge", color = "black") +
+  scale_fill_manual(values = c("gray", "gray", "white", "gray")) +
+  labs(x = "", y = "Annual trend", title = "Relative Humidity Trends in the Day and Night", subtitle = "1941-2022", caption = "Grey indicates 95% confidence, white indicates non-significance.") +
+  theme_minimal()
+
+ggsave(filename = "Figures/rh_day_night_trends.jpeg", plot = rh_day_night, width = 8, height = 5, dpi = 300)
 
 
-
+# Daily shifts plot
 rh %>% 
   group_by(season, hour = hour(date)) %>% 
   summarize(avg = mean(RH)) %>% 
@@ -90,3 +104,53 @@ rh %>%
 
 
 # Fog Frequency diurnal analysis
+
+```{r}
+# creating fog data set, fog is true when RH = 100%
+fog <- rh %>% 
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>% 
+  group_by(season, fog, tod, year = year(date)) %>% 
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season) %>% 
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, tod, year) %>% 
+  filter(fog == "Y")
+
+#overall plot
+ggplot(fog, aes(x = year, y = ff, color = season)) +
+  facet_wrap(~tod) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = F)
+
+# something weird is happening with fall daytime trends
+fog %>% 
+  filter(season == "Fall", tod == "Day") %>% 
+  ggplot(aes(x = year, y = ff))+
+  geom_point() +
+  geom_smooth(se = F)
+
+
+
+# trend data
+trends_fog <- fog %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]], 
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]]) %>% 
+  mutate(sig = ifelse(p <= 0.05, "Y", "N")) 
+
+fog_day_night <- ggplot(trends_fog, aes(x= tod, y = trend, fill = season)) +
+  geom_col(position = "dodge", color = "black") +
+  #scale_fill_manual(values = c("gray", "gray", "white", "gray")) +
+  labs(x = "", y = "Annual trend", title = "Relative Humidity Trends in the Day and Night", subtitle = "1941-2022", caption = "Grey indicates 95% confidence, white indicates non-significance.") +
+  theme_minimal()
+
+# Summer daytime is only significant trend in ff shifts
+fog %>% 
+  filter(season == "Summer", tod == "Day") %>% 
+  ggplot(aes(x = year, y = ff)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F)
+
+
+```
+
