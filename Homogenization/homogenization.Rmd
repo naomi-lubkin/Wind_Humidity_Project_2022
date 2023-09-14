@@ -4,7 +4,7 @@ author: "Naomi Lubkin"
 date: '2022-07-18'
 output: html_document
 ---
-Attempt at homogenization of 1940-2021 MWO wind speed data. Initial attempts include using climatol and snht, but eventually we opt to find the bootstrapped averages due to the fact that (1) we know the date of the shift in station relocataion and (2) the wind speed data is not on a normal curve.
+Attempt at homogenization of 1940-2021 MWO wind speed data. Initial attempts include using climatol and snht, but eventually we opt to find the bootstrapped averages due to the fact that (1) we know the date of the shift in station relocataion and (2) the wind speed data is not on a normal curve. Data is split into 1941-1980 and 1981-2022 timeframes (excludes data from 1980). 
 
 ```{r setup, include=FALSE, echo=F}
 knitr::opts_chunk$set(echo = TRUE)
@@ -39,9 +39,7 @@ library(boot)
 hourly_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/wind_from_wind_1941_2022_rmd.csv")
 hourly_avg <- hourly_avg %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
-  filter(year(date)>=1941) %>% 
-  dplyr::select(date, wind_speed)
-  
+  filter(year(date)>=1941) 
 
 # #daily averages (doesn't include 2022)
 # daily_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly daily wind average 1935-2021.csv")
@@ -50,61 +48,7 @@ hourly_avg <- hourly_avg %>%
 #   filter(year(date)>=1941)
 ```
 
-
-```{r}
-#saving wind data as txt file
-write.table(wind_spd, file = "wind_1941-2021.dat", col.names=FALSE, row.names = FALSE)
-
-#making txt file of station information 
-X <- c(44.27,44.270833)
-Y <- c(71.303611, 71.303333)
-Z <- c(1920.85, 1925.422)
-CODE <- c(0, 0)
-NAME <- c("OBS", "SATOWER")
-df <- data.frame(X, Y, Z, CODE, NAME)
-write.table(df, file = 'wind_1941-2021.est', sep=" ", col.names = FALSE, row.names = FALSE)
-
-homogen("wind", 1941, 2021, nm = 12, std = 2)
-```
-
-
-```{r}
-#SNHT with monthly averages
-#period is months before aug 1981
-wind_snht_monthly<- snht(wind_spd$wind, period=476, robust=FALSE, time =NULL)
-summary(wind_snht_monthly)
-snht_plot <- plotSNHT(wind_spd$wind, wind_snht_monthly, time = NULL, alpha = 0.05)
-
-#SNHT with hourly averages 
-#period is hours before aug 1 1981
-#gets the error: Period is too large to compute statistics
-wind_snht_hourly <- snht(hourly_avg$wind_speed, period = 355729, robust = FALSE, time = NULL)
-hist(hourly_avg$wind_speed)
-
-#SNHT with daily averages
-#period is days before aug 1 1981
-wind_snht_daily <- snht(daily_avg$wind_speed, period = 14609, robust = FALSE, time = NULL)
-summary(wind_snht_daily)
-snht_plot_daily <- plotSNHT(daily_avg$wind_speed, wind_snht_daily, time=NULL, alpha = 0.05)
-```
-
-```{r}
-#Transforming data with square root
-daily_avg_transformed <- daily_avg %>% 
-  mutate(wind_speed_transformed = wind_speed^(1/1.7)) %>%  #square root transformation
-  na.omit() %>% 
-  group_by(date(date)) %>% 
-  summarize(avg_daily_transformed = mean(wind_speed_transformed))
-
-hist(daily_avg_transformed$avg_daily_transformed)
-
-#period is before June 1, 1980
-summary(snht(daily_avg_transformed$avg_daily_transformed, period = 14381))
-
-```
-
-
-## NEW TACTIC: bootstrap to find averages, then homogenize
+## Bootstrap to find averages, then homogenize
 ```{r}
 # making datasets
 hourly_avg_1941 <- hourly_avg %>% 
@@ -171,5 +115,3 @@ plot(diff_means)
 reps_41$t0 - diff_means$t0[1] # mean from 41-80 period minus the difference in means
 reps_81$t0 # mean from 81-22 period
 ```
-
-
