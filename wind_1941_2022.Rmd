@@ -4,7 +4,7 @@ author: "Naomi Lubkin"
 date: "5/1/2023"
 output: html_document
 ---
-Updated wind analysis: 1941-2022
+Updated wind analysis: 1941-2022. Can now ignore wind_analysis.rmd.
 
 #loading in libraries and data
 ```{r setup, include=FALSE}
@@ -18,7 +18,7 @@ library(dplyr)
 library(lubridate) #to separate month, year from date data type
 library(patchwork)
 library(trend)
-library(strucchange) #for statistical break test
+library(kableExtra)
 
 #data
 wind_2022 <- read_csv("Data/2022_wind.csv")
@@ -27,16 +27,12 @@ hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
 ##cleaning data
 
 #hourly wind data, 1941-2021
-#removing dates when wind observations were being switched (summer 1980) and taken in temp location (few months in 1970)
+#removing dates when wind observations were being switched (year of 1980) and taken in temp location (few months in 1970)
 date1 <- ymd_hms("1970-05-04 00:55:00")
 date2 <- ymd_hms("1970-07-09 23:55:00")
 
-era1_start <- ymd_hms("1941-01-01 00:55:00")
-era1_end <- ymd_hms("1980-05-30 23:55:00")
-era2_start <- ymd_hms("1980-09-01 00:55:00")
-era2_end <- ymd_hms("2022-12-31 23:55:00")
-
 hourly_wind <- hourly_wind %>%
+  na.omit() %>% 
   separate(date, into = c("date", "time"), sep = " ") %>%
   mutate(date = as.Date(date),
           month=month(date),
@@ -51,6 +47,7 @@ hourly_wind_41on <- hourly_wind %>%
 
 #hourly wind data, 2022
 hourly_wind_22 <- wind_2022 %>%
+  na.omit() %>% 
   separate(date, into = c("date", "time"), sep = " ") %>%
   mutate(date = as.Date(date),
           month=month(date),
@@ -62,19 +59,30 @@ hourly_wind_22 <- wind_2022 %>%
 
 #merging : dataframe with 1941-2022 hourly wind averages
 hourly_wind_41_22 <- rbind(hourly_wind_41on, hourly_wind_22) 
-hourly_wind_41_22 <- hourly_wind_41_22%>%
-  mutate(era = ifelse(date %within% interval(date1, date2), NA, 
-           ifelse(date %within% interval(era1_start, era1_end),"era1", 
-                             ifelse(date %within% interval(era2_start, era2_end), "era2", NA))))
+hourly_wind_41_22 <- hourly_wind_41_22 %>%
+  filter(!(date %within% interval(date1, date2))) %>% # take out dates from construction
+  mutate(group =  ifelse(year(date) < 1980, 1, 
+                             ifelse(year(date) > 1980, 2, NA))) # take out 1980, sort each timeframe into group 1 and 2
+
 hourly_wind_35_22 <- rbind(hourly_wind, hourly_wind_22)
+
 
 #export dataframe
 write.csv(hourly_wind_41_22, file = "Data/wind_from_wind_1941_2022_rmd.csv")
+```
 
+Data frame is used in homogenization.rmd, then returned to be used here
+```{r}
+hourly_wind_41_22 <- read_csv("Homogenization/wind_1941_2022_homogenized.csv") %>% 
+  dplyr::select(3:9,)
+```
+
+Getting averages from homogenized data
+```{r}
 #daily averages from hourly
-daily_avg <- hourly_wind_35_22 %>%
+daily_avg <- hourly_wind_41_22 %>%
   group_by(date) %>%
-  summarize(wind_speed = mean(wind_speed),  #averaging hourly wind speeds by day
+  summarize(wind_speed = mean(homogenized_wind),  #averaging hourly wind speeds by day from homogenized data
             .groups = "drop") %>%
   na.omit() %>%
   mutate(month=month(date), #adding month column
@@ -91,7 +99,6 @@ monthly_avg <- daily_avg %>%
   summarize(wind_speed = mean(wind_speed), 
             .groups="drop") %>%
   separate(monyear, into = c("month", "year"), sep = "-") %>%
-  mutate(homogenized_wind = ifelse(year <=1981, wind_speed*1.05, wind_speed)) %>%
   mutate(year = as.numeric(year),
          month = as.numeric(month))
 
@@ -113,93 +120,47 @@ seasonal_avg <- daily_avg %>%
                             month == 9 ~ "Fall",
                             month == 10 ~ "Fall",
                             month == 11 ~ "Fall")) %>%
-  group_by(month, season, year_for_season) %>%
-  summarise(monthly_avg_wind = mean(wind_speed), year = year) %>% # monthly avgs from daily
-  group_by(season, year_for_season) %>% 
-  mutate(seasonal_avg_wind = mean(monthly_avg_wind)) # seasonal avgs from monthly
+  group_by(month, season, year) %>%
+  summarise(wind_speed = mean(wind_speed), year_for_season = year_for_season) %>% # monthly avgs from daily
+  group_by(season, year = year_for_season) %>% 
+  summarise(wind_speed = mean(wind_speed)) # seasonal avgs from monthly
            
-
 seasonal_avg$season <- factor(seasonal_avg$season, levels=c("Winter", "Spring", "Summer", "Fall"))
 
-#homogenized monthly values, by season 
-homogenized_seasonal <- seasonal_avg %>%
-  mutate(homogenized_wind = ifelse(year <=1981, monthly_avg_wind*1.05, monthly_avg_wind))
-
-#yearly average, with homogenization pre-1981
+#yearly average
 yearly_avg <- daily_avg %>%
   group_by(month, year) %>%
   summarise(monthly_avg_wind = mean(wind_speed)) %>% 
   group_by(year) %>%
   summarize(wind_speed = mean(monthly_avg_wind), 
             .groups="drop") %>%
-  mutate(homogenized_wind = ifelse(year <=1981, wind_speed*1.05, wind_speed), 
-         group = case_when (year <= 1940 ~ "1", 
-                            year %in% 1941:1980 ~ "2", 
-                            year >= 1981 ~ "3", 
+  mutate(group = case_when (year <= 1940 ~ "1", 
+                            year %in% 1941:1980 ~ "1", 
+                            year >= 1981 ~ "2", 
                             TRUE ~ NA_character_))
 
-## 1941 - 2022 Averages
-<<<<<<< HEAD
-avgs_1941 <- rbind(yearly_avg %>% 
-  ungroup() %>% 
-  summarize(avg = mean(homogenized_wind), season = "Annual"),
-  homogenized_seasonal %>% 
-  ungroup() %>% 
-=======
+t.test(wind_speed ~ group, data = hourly_wind_41_22) # averages should be different
+t.test(homogenized_wind ~ group, data = hourly_wind_41_22) # averages should be similar
+t.test(wind_speed ~ group, data = yearly_avg )# averages should be similar
 
-#overall
-yearly_avg %>% 
-  filter(year >= 1941) %>% 
-  summarize(avg = mean(homogenized_wind))
-
-#seasonal
-homogenized_seasonal %>% 
-  filter(year >= 1941) %>% 
-  group_by(season) %>% 
-  summarize(avg = mean(monthly_avg_wind)))
-
-
-
-## 1981 - 2022 Averages
-<<<<<<< HEAD
-avgs_1981 <- rbind(yearly_avg %>% 
-  ungroup() %>% 
-  filter(year>1980) %>% 
-  summarize(avg = mean(homogenized_wind), season = "Annual"),
-  homogenized_seasonal %>% 
-  ungroup() %>% 
-  filter(year>1980) %>% 
-=======
-
-#overall
-yearly_avg %>% 
-  filter(year >= 1981) %>% 
-  summarize(avg = mean(homogenized_wind))
-
-#seasonal
-homogenized_seasonal %>% 
-  filter(year >= 1981) %>% 
-  group_by(season) %>% 
-  summarize(avg = mean(monthly_avg_wind)))
-
-
-t.test(wind_speed ~ era, data = yearly_avg)
-
-```
-
-#statistical break test attempt
-```{r}
-breakpoints(hourly_wind_41_22$wind_speed)
 ```
 
 # plots
 ```{r}
-yearly_avg <- yearly_avg %>% 
-  filter(year >= 1941)
+# getting data with homogenized and not-homogenized data
+yearly_avg_prehomog_homog <- hourly_wind_41_22 %>% 
+  group_by(date) %>% 
+  summarize(wind_speed = mean(wind_speed), 
+            homogenized_wind = mean(homogenized_wind)) %>% 
+  group_by(month = month(date), year = year(date)) %>% 
+  summarize(wind_speed = mean(wind_speed), 
+            homogenized_wind = mean(homogenized_wind)) %>% 
+  group_by(year) %>% 
+  summarize(wind_speed = mean(wind_speed), 
+            homogenized_wind = mean(homogenized_wind))
 
 #monthly average wind speed
-year_plot_homogenized <- ggplot(data = yearly_avg, aes(x = year, 
-                           y = homogenized_wind)) +
+year_plot_homogenized <- ggplot(data = yearly_avg_prehomog_homog, aes(x = year, y = homogenized_wind)) +
   geom_point() +
   ylim(0,45) +
   labs (x = "Year", y = "Wind Speed (mph)", title="B. Homogenized") +
@@ -208,7 +169,7 @@ year_plot_homogenized <- ggplot(data = yearly_avg, aes(x = year,
   geom_vline(xintercept=1981, 
              linetype="dotted")
 
-year_plot <- ggplot(data = yearly_avg, aes(x = year, 
+year_plot <- ggplot(data = yearly_avg_prehomog_homog, aes(x = year, 
                            y = wind_speed)) +
   geom_point() +
   ylim(0,45) +
@@ -221,101 +182,62 @@ year_plot <- ggplot(data = yearly_avg, aes(x = year,
 yearly_winds <- year_plot + year_plot_homogenized 
 
 # export
-pdf(file = "Figures/wind_homogenization.pdf", width = 8, height = 5)
-yearly_winds
-dev.off()
-
+ggsave("Figures/Wind_homogenization.jpeg", plot = yearly_winds, width = 8, height = 5, dpi = 300)
 
 
 #seasonal plots 
-
-month_homogenized_plot <- ggplot(data = homogenized_seasonal, aes(x = year, 
-                           y = homogenized_wind)) +
+season_homogenized_plot <- ggplot(data = seasonal_avg, aes(x = year, 
+                           y = wind_speed)) +
   geom_point(aes(colour = season), show.legend = "none") +
   ylim(0,70) +
-  labs (x = "Year", y = "Wind Speed (mph)", title = "Wind Speeds (Homogenized) by Season", subtitle = "1981-2022")+
-  theme_classic()+
+  labs (x = "Year", y = "Wind Speed (mph)", title = "Wind Speeds (Homogenized) by Season", subtitle = "1941-2022")+
+  #theme_classic()+
   xlim(1941, 2022) +
   geom_vline(xintercept=1981, 
              linetype="dotted") +
   facet_wrap(~season) 
 
 # export
-pdf(file = "Figures/seasonal_wind_homogenized.pdf", width = 8, height = 5)
-month_homogenized_plot
-dev.off()
+ggsave("Figures/Wind_seasonal_plot.jpeg", plot = season_homogenized_plot, width = 8, height = 5, dpi = 300)
 ```
 
 
-#dataframes for each season 
+#sens slopes for each season 
 ```{r}
-winter <- homogenized_seasonal %>%
-  filter(season == "Winter")
-
-spring <- homogenized_seasonal %>%
-  filter(season == "Spring")
-
-summer <-homogenized_seasonal %>%
-  filter(season == "Summer")
-
-fall <- homogenized_seasonal %>%
-  filter(season == "Fall")
-
-
+trends <- seasonal_avg %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]], 
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
 ```
 
-
-Sen Slopes
-```{r}
-#homogenized data
-#annual 
-annual.sen<- sens.slope(yearly_avg$homogenized_wind, conf.level = 0.95)
-View(annual.sen)
-
-#monthly:
-monthly.sen<-sens.slope(monthly_avg$homogenized_wind, conf.level = 0.95)
-View(monthly.sen)
-
-#seasonal sens
-#winter
-winter.sen<-sens.slope(winter$homogenized_wind, conf.level = 0.95)
-View(winter.sen)
-
-#spring
-spring.sen<-sens.slope(spring$homogenized_wind, conf.level = 0.95)
-View(spring.sen)
-
-#summer
-summer.sen<-sens.slope(summer$homogenized_wind, conf.level = 0.95)
-View(summer.sen)
-
-#fall
-fall.sen<-sens.slope(fall$homogenized_wind, conf.level = 0.95)
-View(fall.sen)
-
-```
 
 # Overall Plot
 ```{r}
 # Annual wind averages 1935-2021 , with linear regression lines fitted to each period of wind observations (Figure 17 in Cronin)
-#NOTE: need to do linear regression significance tests on these lines! 
-annual_avg_plot <- yearly_avg %>%
+# #NOTE: need to do linear regression significance tests on these lines! 
+annual_avg_plot <- hourly_wind_35_22 %>%
+  na.omit() %>% 
+  group_by(year) %>% 
+  summarize(wind_speed = mean(wind_speed)) %>% 
+  mutate(group = case_when (year <= 1940 ~ "1", 
+                            year %in% 1941:1980 ~ "2", 
+                            year >= 1981 ~ "3", 
+                            TRUE ~ NA_character_)) %>% 
   ggplot(aes (x = year, 
               y = wind_speed, 
               colour = group)) +
-  geom_point (show.legend = FALSE) +
-  geom_line(show.legend = FALSE)+
-  geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
-  ylim(0,50) +
-  xlim(1935, 2022) +
+   geom_point (show.legend = FALSE) +
+   geom_line(show.legend = FALSE)+
+   geom_smooth( se =FALSE, method = 'lm', show.legend = FALSE) +
+   ylim(0,50) +
+   xlim(1935, 2022) +   
   theme_minimal() +
-  ggtitle ("MWO Annual Wind Averages 1935-2022") +
-  labs (x= "Year", y = "Wind Speed (mph)")
-
-pdf(file = "Figures/annual_wind_averages.pdf", width = 8, height = 5) 
-annual_avg_plot
-dev.off()
+   ggtitle ("MWO Annual Wind Averages 1935-2022") +
+   labs (x= "Year", y = "Wind Speed (mph)")
+ 
+# Export
+ggsave("Figures/annual_wind_averages.jpeg", plot = annual_avg_plot, width = 8, height = 5, dpi = 300)
 ```
 
 # Trend table
@@ -325,15 +247,15 @@ dev.off()
 annual_trend_81 <- yearly_avg %>% 
   filter(year >= 1981) %>% 
   summarize(season = "Annual",
-            annual_trend = sens.slope(homogenized_wind, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(homogenized_wind, conf.level = 0.95)[["p.value"]]) 
+            annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]]) 
 
-seasonal_trends_81 <- rbind(spring, summer, fall, winter)  
-seasonal_trends_81 <- seasonal_trends_81 %>% 
-  filter(year>=1981) %>%  
+
+seasonal_trends_81 <- seasonal_avg %>% 
+  filter(year >=1981) %>%  
   group_by(season) %>% 
-  summarize(annual_trend = sens.slope(homogenized_wind, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(homogenized_wind, conf.level = 0.95)[["p.value"]])
+  summarize(annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
 
 trends_all_81 <- rbind(annual_trend_81, seasonal_trends_81) %>% 
@@ -355,14 +277,14 @@ save_kable(wind_table_81, file = "Figures/wind_table_81.pdf")
 #annual
 annual_trend_41 <- yearly_avg %>%
   summarize(season = "Annual",
-            annual_trend = sens.slope(homogenized_wind, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(homogenized_wind, conf.level = 0.95)[["p.value"]])
+            annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
-seasonal_trends_41 <- rbind(spring, summer, fall, winter)
-seasonal_trends_41 <- seasonal_trends_41 %>%
+
+seasonal_trends_41 <- seasonal_avg %>%
   group_by(season) %>%
-  summarize(annual_trend = sens.slope(homogenized_wind, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(homogenized_wind, conf.level = 0.95)[["p.value"]])
+  summarize(annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
 
 trends_all_41 <- rbind(annual_trend_41, seasonal_trends_41) %>%
