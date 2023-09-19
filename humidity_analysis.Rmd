@@ -874,14 +874,17 @@ save_kable(ff_table, file = "Figures/ff_table.pdf")
 
 # Annual trend table 
 ```{r}
-
+## Diurnal data
 ## Overall data
+trends_diurnal_rh <- read_csv("Figures/trends_diurnal_rh.csv") %>% 
+  dplyr::select(2:6,)
+
 
 # calculate annual trends
 annual <- year_rh %>% 
   summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
             p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
+            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
             type = "Overall") 
 
 
@@ -892,7 +895,7 @@ annual_season <- season_summary %>%
   group_by(season) %>% 
   summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
             p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
+            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
             type = "Overall") 
 
 
@@ -903,7 +906,7 @@ annual_season <- season_summary %>%
 annual_clear <- clear_summary %>% 
   summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
             p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
+            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
             type = "Clear") 
 #seasonal
 annual_season_clear <- clear %>% 
@@ -917,7 +920,7 @@ annual_season_clear <- clear %>%
   group_by(season) %>% 
   summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
             p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
+            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
             type = "Clear") 
 
 
@@ -929,24 +932,57 @@ annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_seaso
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Decadal trend (%/decade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
          "p-value" = p) %>% 
-  dplyr::select(" ", "Decadal trend (%/decade)") %>% 
+  dplyr::select(Type, " ", "Decadal trend (%/decade)") %>% 
   distinct() %>%   # removes rows with repeat values
   as.data.frame(html_table())
-  
 
 
 # Making the table, KableExtra package
-
-
 rh_table <- annual_trends_all %>%
   kbl(caption = "Decadal Trends of Relative Humidity from 1941-2022") %>%
   footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>% 
   group_rows(group_label = "All", start_row = 1, end_row = 5, hline_after = T) %>% 
   group_rows(group_label = "Clear", start_row = 6, end_row = 10) %>% 
-  add_indent(positions = 1:10, level_of_indent = 2, all_cols = T)
+  add_indent(positions = 1:10, level_of_indent = 2, all_cols = T) 
 
 save_kable(rh_table, file = "Figures/humidity_table.pdf")
+
+
+
+# Another table, including Day and Night
+day <- trends_diurnal_rh %>% 
+  filter(tod == "Day") 
+night <- trends_diurnal_rh %>% 
+  filter(tod == "Night") 
+  
+a <- bind_cols(bind_rows(annual, annual_season), bind_rows(annual_clear, annual_season_clear), day, night) %>% 
+  mutate(season = ifelse(is.na(season...4), "Annual", as.character(season...4)),
+         decadal_trend_overall = annual_trend...1*10,
+         decadal_trend_clear = annual_trend...5*10,
+         decadal_trend_day = trend...10*10,
+         decadal_trend_night = trend...15*10,
+            decadal_trend_overall = format(round(decadal_trend_overall, 3), nsmall = 3), # round trend to 3 decimal places
+            decadal_trend_clear = format(round(decadal_trend_clear, 3), nsmall = 3),
+            decadal_trend_day = format(round(decadal_trend_day, 3), nsmall = 3),
+            decadal_trend_night = format(round(decadal_trend_night, 3), nsmall = 3),
+         decadal_trend_overall = ifelse(p...2 <= 0.05, str_c(decadal_trend_overall, "*"), decadal_trend_overall), # add asterisks
+         decadal_trend_clear = ifelse(p...6 <= 0.05, str_c(decadal_trend_clear, "*"), decadal_trend_clear), 
+         decadal_trend_day = ifelse(p...11 <= 0.05, str_c(decadal_trend_day, "*"), decadal_trend_day), # add asterisks
+         decadal_trend_night = ifelse(p...16 <= 0.05, str_c(decadal_trend_night, "*"), decadal_trend_night)) %>% 
+  dplyr::select(season, decadal_trend_overall, decadal_trend_clear, decadal_trend_day, decadal_trend_night)
+  
+
+b <- data.frame(stringsAsFactors = FALSE, a)
+names(x = b) <- c("Season", "Overall", "Clear", "Day", "Night")
+
+
+table <- b %>%
+  kbl(caption = "Decadal Trends of Relative Humidity (%/Decade) from 1941-2022") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+  
+save_kable(table, file = "Figures/humidity_table_diurnal.pdf")
 
 ```
 

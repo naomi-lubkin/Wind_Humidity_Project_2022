@@ -4,7 +4,7 @@ author: "Naomi Lubkin"
 date: '2022-07-18'
 output: html_document
 ---
-Attempt at homogenization of 1940-2021 MWO wind speed data. Initial attempts include using climatol and snht, but eventually we opt to find the bootstrapped averages due to the fact that (1) we know the date of the shift in station relocataion and (2) the wind speed data is not on a normal curve. Data is split into 1941-1980 and 1981-2022 timeframes (excludes data from 1980). 
+Homogenization of 1940-2021 MWO wind speed data. Initial attempts include using climatol and snht, but eventually we opt to find the bootstrapped averages due to the fact that (1) we know the date of the shift in station relocataion and (2) the wind speed data is not on a normal curve. Data is split into 1941-1980 and 1981-2022 timeframes (excludes data from 1980). 
 
 ```{r setup, include=FALSE, echo=F}
 knitr::opts_chunk$set(echo = TRUE)
@@ -18,34 +18,11 @@ library(boot)
 
 #Loading in data/making dataframes
 ```{r}
-#for monthly data (doesn't include 2022)
-#b16 monthly average wind speed (from hourly averages), jan 1935- dec 2021
-#monthly_avg <- read_csv("b16-hourly monthly wind average 1935-2021.csv")
-#
-# #cleaning data 
-# monthly_avg <- monthly_avg %>%
-#   mutate(monthly_avg_speed = as.numeric(monthly_avg_speed), 
-#          monthly_avg_spd = round(monthly_avg_speed, digits = 1), 
-#          date = as.Date(date), 
-#          month = month(date), 
-#          year =year(date)) 
-# 
-# wind_spd <- monthly_avg %>%
-#   filter(year>=1941) %>% 
-#   dplyr::select(monthly_avg_spd) %>% 
-#   rename(wind = monthly_avg_spd)
-
 #for hourly data
 hourly_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/wind_from_wind_1941_2022_rmd.csv")
 hourly_avg <- hourly_avg %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
   filter(year(date)>=1941) 
-
-# #daily averages (doesn't include 2022)
-# daily_avg <- read_csv("/Users/larzvonhuene/Documents/GitHub/Wind_Humidity_Project_2022/Data/b16-hourly daily wind average 1935-2021.csv")
-# daily_avg<- daily_avg %>%
-#   mutate(wind_speed = as.numeric(daily_avg_speed)) %>%
-#   filter(year(date)>=1941)
 ```
 
 ## Bootstrap to find averages, then homogenize
@@ -78,7 +55,7 @@ reps_81$t0/reps_41$t0
 
 # homogenize and recombine 
 hourly_avg_1941 <- hourly_avg_1941 %>% 
-  mutate(homogenized_wind = wind_speed * 1.056) # homogenize by multiplying first era by 1.05
+  mutate(homogenized_wind = wind_speed * 1.05) # homogenize by multiplying first era by 1.05
 hourly_avg_1981 <- hourly_avg_1981 %>% 
   mutate(homogenized_wind = wind_speed)
 homogenized <- rbind(hourly_avg_1941, hourly_avg_1981)
@@ -86,11 +63,15 @@ homogenized <- rbind(hourly_avg_1941, hourly_avg_1981)
 
 # exporting homogenized data
 write.csv(homogenized, file = "wind_1941_2022_homogenized.csv")
+
+homogenized %>% 
+  group_by(group) %>% 
+  summarize(mean = mean(homogenized_wind))
   
 ```
 
 
-## Bootstrap the difference in means
+## Bootstrap the difference in means: ensuring the bootstrapped averages are right
 ```{r}
 # bootstrap the difference in means between time periods
 hourly_avg_h <- hourly_avg %>% 
@@ -115,3 +96,24 @@ plot(diff_means)
 reps_41$t0 - diff_means$t0[1] # mean from 41-80 period minus the difference in means
 reps_81$t0 # mean from 81-22 period
 ```
+
+
+# Comparison
+```{r}
+a <- homogenized %>% 
+  group_by(year) %>% 
+  summarize(avg_speed = mean(wind_speed), avg_homogen = mean (homogenized_wind)) %>% 
+  ggplot(aes(x = year, y = avg_homogen))+ 
+  geom_point() + 
+  ylim(20,45)
+b <- homogenized %>% 
+  group_by(year) %>% 
+  summarize(avg_speed = mean(wind_speed), avg_homogen = mean (homogenized_wind)) %>%   
+  ggplot(aes(x = year, y = avg_speed))+
+  geom_point() +
+  ylim(20,45)
+
+b+a
+
+```
+
