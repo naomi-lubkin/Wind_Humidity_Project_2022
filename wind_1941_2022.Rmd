@@ -143,6 +143,29 @@ t.test(wind_speed ~ group, data = hourly_wind_41_22) # averages should be differ
 t.test(homogenized_wind ~ group, data = hourly_wind_41_22) # averages should be similar
 t.test(wind_speed ~ group, data = yearly_avg )# averages should be similar
 
+
+# getting overall averages: 1941-2022
+avgs <- seasonal_avg %>% 
+  group_by(season) %>% 
+  summarize(avg = mean(wind_speed)) %>% 
+  rbind(c("Overall", mean(yearly_avg$wind_speed))) %>% 
+  mutate(avg = as.numeric(avg)) %>% 
+  mutate(avg = format(round(avg, 1), nsmall = 1)) %>% 
+  bind_cols(seasonal_avg %>% 
+              filter(year > 1980) %>% 
+              group_by(season) %>% 
+              summarize(avg = mean(wind_speed)) %>% 
+              rbind(c("Overall", mean(yearly_avg$wind_speed))) %>% 
+              mutate(avg = as.numeric(avg)) %>% 
+              mutate(avg = format(round(avg, 1), nsmall = 1)))
+names(avgs) <- c("Season", "Average", "Season", "Average")
+
+wind_avgs_table <- avgs %>% 
+  kbl(caption = "Wind Speed Averages (mph)") %>%
+  kable_classic(full_width = F, html_font = "Cambria") %>% 
+  add_header_above(c("1941-2022" = 2, "1981-2022" = 2))
+save_kable(wind_avgs_table, file = "Figures/wind_avgs_table.pdf")
+
 ```
 
 # plots
