@@ -288,7 +288,7 @@ seasonal_trends_41 <- seasonal_avg %>%
 
 
 trends_all_41 <- rbind(annual_trend_41, seasonal_trends_41) %>%
-  mutate(decadal_trend = annual_trend*10,
+  transmute(decadal_trend = annual_trend*10,
          " " = ifelse(is.na(season), "Annual", season),
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
          "Decadal trend (mph/decaade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
