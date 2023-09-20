@@ -146,19 +146,28 @@ t.test(wind_speed ~ group, data = yearly_avg )# averages should be similar
 
 # getting overall averages: 1941-2022
 avgs <- seasonal_avg %>% 
+  mutate(season = factor(season, levels = c("Overall", "Winter", "Spring", "Summer", "Fall"))) %>% 
   group_by(season) %>% 
   summarize(avg = mean(wind_speed)) %>% 
   rbind(c("Overall", mean(yearly_avg$wind_speed))) %>% 
   mutate(avg = as.numeric(avg)) %>% 
-  mutate(avg = format(round(avg, 1), nsmall = 1)) %>% 
+  mutate(avg = format(round(avg, 1), nsmall = 1)) %>%
   bind_cols(seasonal_avg %>% 
               filter(year > 1980) %>% 
               group_by(season) %>% 
               summarize(avg = mean(wind_speed)) %>% 
               rbind(c("Overall", mean(yearly_avg$wind_speed))) %>% 
               mutate(avg = as.numeric(avg)) %>% 
-              mutate(avg = format(round(avg, 1), nsmall = 1)))
+              mutate(avg = format(round(avg, 1), nsmall = 1))) 
+
+avgs %>% 
+mutate(season...1 = factor(season...1, levels = c("Overall", "Winter", "Spring", "Summer", "Fall")),
+       season...3 = factor(season...3, levels = c("Overall", "Winter", "Spring", "Summer", "Fall")))
+
 names(avgs) <- c("Season", "Average", "Season", "Average")
+
+avgs %>% 
+  mutate(season = factor(season, levels = c("Overall", "Winter", "Spring", "Summer", "Fall")))
 
 wind_avgs_table <- avgs %>% 
   kbl(caption = "Wind Speed Averages (mph)") %>%
