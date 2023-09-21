@@ -1,0 +1,88 @@
+---
+title: "Saturation Vapor Pressure Analysis"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-09-21"
+output: html_document
+---
+
+This rmd uses data from humidity_analysis.rmd to analyze trends in saturation vapor pressure, caluclated from equations used in MWO 2008.
+
+
+#Load Packages
+```{r, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(trend)
+library(patchwork)
+library(kableExtra)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Data
+```{r}
+sv <- read_csv("Data/rh_from_humidity_analysis_rmd.csv")
+```
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- sv %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_sat_vap = mean(sat_vap)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_sat_vap = mean(daily_average_sat_vap)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(average_RH = mean(monthly_average_RH),
+            average_sat_vap = mean(monthly_average_sat_vap)) # get seasonal avg from monthly avg
+
+# getting averages (daily, monthly, yearly)
+year_sv <- sv %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_sat_vap = mean(sat_vap)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_sat_vap = mean(daily_average_sat_vap)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_sat_vap = mean(monthly_average_sat_vap)) # get yearly avg from monthly avg
+
+```
+
+#Visuals
+```{r}
+#histogram of data
+hist(sv$sat_vap)
+
+#density plot (season overview)
+rh %>% 
+  filter(RH < 100) %>% 
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
+  ggplot(aes(x = sat_vap, fill = season, color = season)) + geom_density(alpha = 0.5) + 
+  theme_classic()
+
+# 1941-2022 trends
+season <- season_summary %>% 
+  ggplot(aes(x = year_for_winter, y = average_sat_vap, color = season)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  ylim(0,15)
+year <- year_sv %>% 
+  ggplot(aes(x = year, y = avg_sat_vap)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F)+
+  ylim(0,15) 
+season + year
+```
+#Trends 
+```{r}
+trends <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(average_sat_vap, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(average_sat_vap, conf.level = 0.95)[["p.value"]]) %>% 
+  rbind(c("Annual", sens.slope(year_sv$avg_sat_vap, conf.level = 0.95)[["estimates"]], sens.slope(year_sv$avg_sat_vap, conf.level = 0.95)[["p.value"]]))
+
+```
+
