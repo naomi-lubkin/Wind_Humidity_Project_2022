@@ -166,9 +166,6 @@ mutate(season...1 = factor(season...1, levels = c("Overall", "Winter", "Spring",
 
 names(avgs) <- c("Season", "Average", "Season", "Average")
 
-avgs %>% 
-  mutate(season = factor(season, levels = c("Overall", "Winter", "Spring", "Summer", "Fall")))
-
 wind_avgs_table <- avgs %>% 
   kbl(caption = "Wind Speed Averages (mph)") %>%
   kable_classic(full_width = F, html_font = "Cambria") %>% 
