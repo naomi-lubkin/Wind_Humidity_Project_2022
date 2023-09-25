@@ -17,47 +17,36 @@ library(tidyverse)
 #loading in and cleaning data 
 ```{r}
 #data
-wind_2022 <- read_csv("Data/2022_wind.csv") %>%
-  select(date, wind_speed)
-hourly_wind <- read_csv("Data/b16-hourly wind 1935-2021.csv")
-rbind(hourly_wind, wind_2022)
+hourly_wind <- read_csv("Homogenization/wind_1941_2022_homogenized.csv")
 
 hourly_direction <- read_csv("Data/b16-hourly wind speed plus direction 1935-2021.csv")
 wind_2022_dir <- read_csv("Data/2022_wind.csv") %>%
-  select(date, wind_speed, wind_direction)
-rbind(hourly_direction, wind_2022_dir)
+  select(date, wind_speed, wind_direction) %>% 
+  rbind(hourly_direction)
 
-#WIND SPEED
-#hourly wind speed data, 1941-2022
-#removing dates when wind observations were being switched (summer 1980) and taken in temp location (may-july 1970)
-date1 <- ymd_hms("1970-05-04 00:55:00")
-date2 <- ymd_hms("1970-07-09 23:55:00")
-
-era1_start <- ymd_hms("1941-01-01 00:55:00")
-era1_end <- ymd_hms("1980-05-30 23:55:00")
-era2_start <- ymd_hms("1980-09-01 00:55:00")
-era2_end <- ymd_hms("2022-12-31 23:55:00")
 
 #wind speed: winter 1941-2022, day vs. night
 speed <- hourly_wind %>%
-  mutate(era = ifelse(date %within% interval(date1, date2), NA, 
-           ifelse(date %within% interval(era1_start, era1_end),"era1", 
-                             ifelse(date %within% interval(era2_start, era2_end), "era2", NA)))) %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
-  mutate(wind_speed = case_when(wind_speed >= 0 ~ wind_speed,
-                                wind_speed == "NULL" ~ NA)) %>% 
   na.omit() %>%
-  mutate(time = hour(date) + 1) %>%
+  mutate(time = hour(time) + 1) %>% # rounding the hour
   mutate(day_status = case_when (time >= 1 & time<6 ~"night", 
                                  time >=6 & time<18 ~"day", 
                                  time >= 18 ~ "night")) %>%
-  mutate(month = month(date), 
+   mutate(month = month(date), 
          year = year(date)) %>%
-  filter(month == 12 | month == 1 | month== 2) %>%
-  group_by(month, year, day_status) %>%
-  summarise(avg_wind = mean(wind_speed), 
-            .groups = 'drop') %>%
-  as.data.frame()
+   mutate(season = case_when(month == 12 ~ "Winter", 
+                            month == 1 ~ "Winter", 
+                            month == 2 ~ "Winter", 
+                            month == 3 ~ "Spring", 
+                            month == 4 ~ "Spring",
+                            month == 5 ~ "Spring",
+                            month == 6 ~ "Summer",
+                            month == 7 ~ "Summer",
+                            month == 8 ~ "Summer",
+                            month == 9 ~ "Fall",
+                            month == 10 ~ "Fall",
+                            month == 11 ~ "Fall")) 
   
 
 #wind direction: winter 1941-2022, day vs. night
@@ -117,21 +106,76 @@ wind_counts <- direction %>%
 
 ```
 
+# getting speed averages
+```{r}
+speed_season <- speed %>% 
+  group_by(season, date, day_status) %>% 
+  summarize(wind_speed = mean(homogenized_wind)) %>% 
+  group_by(season, month = month(date), year =year(date), day_status) %>% 
+  summarize(wind_speed = mean(wind_speed)) %>% 
+  group_by(season, year, day_status) %>% 
+  summarize(wind_speed = mean(wind_speed))
+
+speed_year <- speed %>%
+  group_by(date, day_status) %>% 
+  summarize(wind_speed = mean(homogenized_wind)) %>% 
+  group_by(month = month(date), year =year(date), day_status) %>% 
+  summarize(wind_speed = mean(wind_speed)) %>% 
+  group_by(year, day_status) %>% 
+  summarize(wind_speed = mean(wind_speed))
+```
+
+
 #Wind speed analysis
 ```{r}
 #stats
-#t-test between day and night
-t.test(avg_wind ~ day_status, data = speed, var.equal=TRUE)
+#t-test between day and night, annual
+t <- t.test(homogenized_wind ~ day_status, data = speed, var.equal=TRUE)
 
-#anova with day and night and year
-speed.lm <- lm(avg_wind ~ day_status + year, data = speed)
-summary(speed.lm)
+diff(unname(t$estimate[1:2]))
+
+t_trends <- speed %>% 
+  group_by(year,season) %>% 
+  summarize(diff = diff(t.test(homogenized_wind ~ day_status, var.equal=TRUE)[["estimate"]])) 
+ggplot(t_trends, aes(x = year, y = diff))+
+  geom_point()+
+  geom_smooth(method = "lm", se = F) +
+  facet_wrap(~season)
+
+t_trends %>% 
+  group_by(season) %>% 
+ summarize(p = sens.slope(diff, conf.level = 0.95)[["p.value"]])
+  
+#seasonal t-test
+speed %>% 
+  group_by(season) %>% 
+  summarize(diff = diff(t.test(homogenized_wind ~ day_status, var.equal=TRUE)[["estimate"]]),
+    p = t.test(homogenized_wind ~ day_status, var.equal=TRUE)[["p.value"]])
+
 
 #plot
-ggplot(data = speed, aes(x=year, y = avg_wind)) +
-  geom_point()+
-  facet_wrap(~day_status) +
-  ylim(0, 60)
+ggplot(data = speed_season, aes(x=year, y = wind_speed, color = day_status)) +
+  geom_smooth(se = F)+
+  facet_wrap(~season) + 
+  theme_classic()
+
+# trends
+
+seasonal_trends <- speed_season %>% 
+  group_by(season, day_status) %>% 
+  summarize(trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]]) 
+trends <- speed_year %>% 
+          group_by(day_status) %>% 
+          summarize(trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]]) %>% 
+  mutate(season = "Annual") %>% 
+  rbind(seasonal_trends) %>% 
+  reaarange()
+
+# export for trends table
+write.csv(trends, file = "Figures/diurnal_wind_trends.csv")
+
 ```
 
 #Wind direction analysis

@@ -66,7 +66,6 @@ hourly_wind_41_22 <- hourly_wind_41_22 %>%
 
 hourly_wind_35_22 <- rbind(hourly_wind, hourly_wind_22)
 
-
 #export dataframe
 write.csv(hourly_wind_41_22, file = "Data/wind_from_wind_1941_2022_rmd.csv")
 ```
@@ -269,6 +268,13 @@ annual_avg_plot <- hourly_wind_35_22 %>%
 ggsave("Figures/annual_wind_averages.jpeg", plot = annual_avg_plot, width = 8, height = 5, dpi = 300)
 ```
 
+
+#Diurnal
+```{r}
+
+```
+
+
 # Trend table
 ```{r}
 # 1981 - 2022
@@ -291,9 +297,9 @@ trends_all_81 <- rbind(annual_trend_81, seasonal_trends_81) %>%
   mutate(decadal_trend = annual_trend*10,
          " " = ifelse(is.na(season), "Annual", season), 
          decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
-         "Decadal trend (mph/decaade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
+         "Decadal trend (mph/decade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
          "p-value" = p) %>% 
-  dplyr::select(" ", "Decadal trend (mph/decaade)")
+  dplyr::select(" ", "Decadal trend (mph/decade)")
 
 
 wind_table_81 <- trends_all_81 %>% 
@@ -306,32 +312,47 @@ save_kable(wind_table_81, file = "Figures/wind_table_81.pdf")
 #annual
 annual_trend_41 <- yearly_avg %>%
   summarize(season = "Annual",
+            day_status = "all",
             annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
             p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
-
+#seasonal
 seasonal_trends_41 <- seasonal_avg %>%
   group_by(season) %>%
-  summarize(annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
+  summarize(day_status = "all",
+            annual_trend = sens.slope(wind_speed, conf.level = 0.95)[["estimates"]],
             p = sens.slope(wind_speed, conf.level = 0.95)[["p.value"]])
 
+#diurnal (from diurnal_wind.rmd)
+diurnal_trend <- read_csv("Figures/diurnal_wind_trends.csv") %>% 
+  dplyr::select(2:5) %>% 
+  rename(annual_trend = trend)
+  
+  
 
-trends_all_41 <- rbind(annual_trend_41, seasonal_trends_41) %>%
-  transmute(decadal_trend = annual_trend*10,
-         " " = ifelse(is.na(season), "Annual", season),
-         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
-         "Decadal trend (mph/decaade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
-         "p-value" = p) %>%
-  dplyr::select(" ", "Decadal trend (mph/decaade)")
+trends_all_41 <- rbind(annual_trend_41, seasonal_trends_41, diurnal_trend) %>%
+  mutate(decadal_trend = annual_trend*10,
+            decadal_trend = format(round(decadal_trend, 3), nsmall = 3),
+            decadal_trend = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend)) %>% 
+  dplyr::select(!c(annual_trend, p)) %>% 
+  pivot_wider(names_from = day_status, values_from = decadal_trend) %>% 
+  transmute(" " = season,
+         Overall = all,
+         Day = day,
+         Night = night)
+
+
 
 
 wind_table_41 <- trends_all_41 %>%
   kbl(caption = "Decadal Trends of Wind Speeds from 1941-2022") %>%
-  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind speed trends", "Wind speeds prior to 1981 homogenized to account for the Observatory location shift")) %>%   kable_classic(full_width = F, html_font = "Cambria")
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual wind speed trends", "Wind speeds prior to 1980 homogenized to account for the Observatory location shift")) %>%   kable_classic(full_width = F, html_font = "Cambria")
 
 save_kable(wind_table_41, file = "Figures/wind_table_1941.pdf")
 
 ```
+
+
 
 
 
