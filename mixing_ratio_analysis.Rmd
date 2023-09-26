@@ -1,0 +1,137 @@
+---
+title: "Mixing Ratio Analysis"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-09-22"
+output: html_document
+---
+
+This rmd uses data from humidity_analysis.rmd to analyze trends in mixing ratio, caluclated from American Meteorology Society glossary (2012).
+
+
+#Load Packages
+```{r, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(trend)
+library(patchwork)
+library(kableExtra)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Data
+```{r}
+mr <- read_csv("Data/rh_from_humidity_analysis_rmd.csv")
+mr_clear <- mr %>% 
+  filter(RH < 100)
+```
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- mr %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_temp = mean(dry_bulb),
+            daily_average_mr = mean(mixing_ratio)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_temp = mean(daily_average_temp),
+            monthly_average_mr = mean(daily_average_mr)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_temp = mean(monthly_average_temp),
+            avg_mr = mean(monthly_average_mr)) # get seasonal avg from monthly avg
+
+# getting averages (daily, monthly, yearly)
+year_mr <- mr %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_temp = mean(dry_bulb),
+            daily_average_mr = mean(mixing_ratio)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_temp = mean(daily_average_temp),
+            monthly_average_mr = mean(daily_average_mr)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(vg_temp = mean(monthly_average_temp),
+            avg_mr = mean(monthly_average_mr)) # get yearly avg from monthly avg
+
+```
+
+#Visuals
+```{r}
+#histogram of data
+hist(mr$mixing_ratio)
+
+#density plot (season overview)
+mr %>% 
+  filter(RH < 100) %>% 
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
+  ggplot(aes(x = mixing_ratio, fill = season, color = season)) + geom_density(alpha = 0.5) + 
+  theme_classic()
+
+# 1941-2022 trends
+season <- season_summary %>% 
+  ggplot(aes(x = year_for_winter, y = avg_mr, color = season)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) + ylim(0,0.01)
+year <- year_mr %>% 
+  ggplot(aes(x = year, y = avg_mr)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) + ylim(0,0.01)
+season + year
+```
+#Trends 
+```{r}
+trends <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]]) %>% 
+  rbind(c("Annual", sens.slope(year_mr$avg_mr, conf.level = 0.95)[["estimates"]], sens.slope(year_mr$avg_mr, conf.level = 0.95)[["p.value"]]))
+
+```
+## CLEAR AIR class
+
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary_clear <- mr_clear %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_temp = mean(dry_bulb),
+            daily_average_mr = mean(mixing_ratio)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_temp = mean(daily_average_temp),
+            monthly_average_mr = mean(daily_average_mr)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_temp = mean(monthly_average_temp),
+            avg_mr = mean(monthly_average_mr)) # get seasonal avg from monthly avg
+
+# getting averages (daily, monthly, yearly)
+year_mr_clear <- mr_clear %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_temp = mean(dry_bulb),
+            daily_average_mr = mean(mixing_ratio)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_temp = mean(daily_average_temp),
+            monthly_average_mr = mean(daily_average_mr)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(vg_temp = mean(monthly_average_temp),
+            avg_mr = mean(monthly_average_mr)) # get yearly avg from monthly avg
+
+```
+
+# Visuals
+```{r}
+ggplot(year_mr, aes(year, avg_mr)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  ggtitle("Overall") +
+ggplot(year_mr_clear, aes(year, avg_mr))+
+  geom_point() +
+  geom_smooth(method = "lm",  se = F) +
+  ggtitle("Clear")
+```
+
+# trends
+```{r}
+trends_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]]) %>% 
+  rbind(c("Annual", sens.slope(year_mr_clear$avg_mr, conf.level = 0.95)[["estimates"]], sens.slope(year_mr_clear$avg_mr, conf.level = 0.95)[["p.value"]]))
+```

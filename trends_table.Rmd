@@ -1,0 +1,278 @@
+---
+title: "trend_table"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-09-26"
+output: html_document
+---
+
+# Packages
+```{r}
+library(tidyverse)
+library(kableExtra)
+```
+
+# Data
+```{r}
+rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") %>% 
+  filter(year(date) >= 1941) %>% 
+  dplyr::select(!...1) %>% 
+  arrange(date)
+```
+
+# Getting Averages
+```{r}
+# Incorporate fog
+fog <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(season, fog, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+fog_overall <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(fog, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+# Overall
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- rh %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year = year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>% # get seasonal avg from monthly avg
+  full_join(fog) %>% 
+  na.omit()
+
+year_rh <- rh %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>%  # get yearly avg from monthly avg
+  full_join(fog_overall)
+
+```
+
+```{r}
+#Clear
+season_summary_clear <- rh %>% 
+  filter(RH < 100) %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get seasonal avg from monthly avg
+
+
+year_rh_clear <- rh %>%
+  filter(RH < 100) %>%
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get yearly avg from monthly avg
+
+```
+
+# Trends: Diurnal, Overall, Clear
+```{r}
+## Diurnal data (from humidity_diurnal.rmd)
+trends_diurnal <- read_csv("Figures/diurnal_humidity_trends.csv") %>% 
+  rename(class = tod)
+```
+
+```{r}
+## Overall data
+trends_rh <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_RH, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_RH, conf.level = 0.95)[["p.value"]],
+            measure = "rh") %>% 
+  rbind(year_rh %>%
+  summarize(trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "rh"))
+
+trends_mr <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]],
+            measure = "mr") %>% 
+  rbind(year_rh %>%
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "mr"))
+
+trends_dew <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]],
+            measure = "dew") %>% 
+  rbind(year_rh %>%
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "dew"))
+
+trends_temp <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]],
+            measure = "temp") %>% 
+  rbind(year_rh %>%
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "temp"))
+
+trends_ff <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]],
+            measure = "ff") %>% 
+  rbind(year_rh %>%
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "ff"))
+
+trends_overall <- rbind(trends_rh, trends_mr, trends_dew, trends_temp, trends_ff) %>% 
+  mutate(sig = ifelse(p <= 0.05, "Y", "N"), class = "overall") 
+```
+
+```{r}
+## Clear trends
+trends_rh_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_RH, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_RH, conf.level = 0.95)[["p.value"]],
+            measure = "rh") %>% 
+  rbind(year_rh_clear %>%
+  summarize(trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "rh"))
+
+trends_mr_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]],
+            measure = "mr") %>% 
+  rbind(year_rh_clear %>%
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "mr"))
+
+trends_dew_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]],
+            measure = "dew") %>% 
+  rbind(year_rh_clear %>%
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "dew"))
+
+trends_temp_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]],
+            measure = "temp") %>% 
+  rbind(year_rh_clear %>%
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "temp"))
+
+trends_ff_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = NA,
+            p = NA,
+            measure = "ff") %>% 
+  rbind(year_rh_clear %>%
+  summarize(trend = NA,
+            p = NA) %>%
+  mutate(season = "Annual", measure = "ff"))
+
+trends_clear <- rbind(trends_rh_clear, trends_mr_clear, trends_dew_clear, trends_temp_clear, trends_ff_clear) %>% 
+  mutate(sig = ifelse(p <= 0.05, "Y", "N"), class = "Clear") 
+```
+
+
+# Kable Table
+```{r}
+#combine tables into one and make it look nice
+trends <- bind_rows(trends_overall, trends_clear, trends_diurnal) %>% 
+  mutate(decadal_trend = trend*10,
+         decadal_trend = ifelse(abs(decadal_trend) > 0.001, format(round(decadal_trend, 3), nsmall = 3),format(round(decadal_trend,0), nsmall = 0)),
+         decadal_trend = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend)) %>% 
+  dplyr::select(!c(p, trend, sig)) %>% 
+  pivot_wider(names_from = measure, values_from = decadal_trend) %>% 
+  mutate(class = factor(class, levels =c("overall", "Clear", "Day", "Night")),
+         season = factor(season, levels =c("Annual", "Winter", "Spring", "Summer", "Fall")))
+
+trends_table <- trends %>% 
+  arrange(class, season) %>% 
+  dplyr::select(!class) %>% 
+  rename("Relative Humidity" = rh,
+         "Mixing ratio" = mr,
+         "Dewpoint" = dew,
+         "Temperature" = temp,
+         "Fog frequency" = ff,
+         " " = season) %>% 
+  kbl(caption = "Decadal Trends 1941-2022") %>% 
+  pack_rows("Overall", 1,5) %>% 
+  pack_rows("Clear", 6,10) %>% 
+  pack_rows("Day", 11,15) %>% 
+  pack_rows("Night", 16,20) %>% 
+  kable_classic(full_width = F, html_font = "Cambria") %>%
+  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate trends"))
+
+save_kable(trends_table, file = "Figures/trends_all_humidity_metrics.pdf")
+```
+

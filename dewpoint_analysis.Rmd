@@ -1,0 +1,167 @@
+---
+title: "Dewpoint Analysis"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-09-22"
+output: html_document
+---
+This rmd uses data from humidity_analysis.rmd to analyze trends in dewpoint, caluclated from equations used in MWO 2008.
+
+
+#Load Packages
+```{r, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(trend)
+library(patchwork)
+library(kableExtra)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Data
+```{r}
+dew <- read_csv("Data/rh_from_humidity_analysis_rmd.csv")
+
+dew_clear <- dew %>% 
+  filter(RH < 100)
+```
+
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- dew %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get seasonal avg from monthly avg
+
+# getting averages (daily, monthly, yearly)
+year_dew <- dew %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get yearly avg from monthly avg
+
+```
+
+# Visuals
+```{r}
+ggplot(year_dew, aes(year, avg_dew)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+ggplot(year_dew, aes(year, avg_temp))+
+  geom_point() +
+  geom_smooth(method = "lm",  se = F) 
+
+year_dew %>% 
+  dplyr::select(!avg_rh) %>% 
+  gather("measure", "degree", 2:3) %>% 
+  ggplot(aes(year, degree, color = measure)) +
+  geom_point() +
+  geom_smooth(se = F)
+
+
+dew %>%
+  filter(year(date) == 1950) %>% 
+  gather("measure", "degree", c(3,8)) %>% 
+  ggplot(aes(date, degree, color = measure)) +
+  geom_line() +
+  geom_smooth(se = F) 
+
+dew %>%
+  filter(year(date) == 1980) %>% 
+  gather("measure", "degree", c(3,8)) %>% 
+  ggplot(aes(date, degree, color = measure)) +
+  geom_line() +
+  geom_smooth(se = F) 
+```
+
+# trends
+```{r}
+trends <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]]) %>% 
+  rbind(c("Annual", sens.slope(year_sv$avg_dew, conf.level = 0.95)[["estimates"]], sens.slope(year_sv$avg_dew, conf.level = 0.95)[["p.value"]]))
+```
+## CLEAR AIR class
+
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary_clear <- dew_clear %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_temp = mean(monthly_average_temp)) # get seasonal avg from monthly avg
+
+# getting averages (daily, monthly, yearly)
+year_dew_clear <- dew_clear %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_temp = mean(monthly_average_temp)) # get yearly avg from monthly avg
+
+```
+
+# Visuals
+```{r}
+ggplot(year_dew, aes(year, avg_dew)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  ggtitle("Overall") +
+ggplot(year_dew_clear, aes(year, avg_dew))+
+  geom_point() +
+  geom_smooth(method = "lm",  se = F) +
+  ggtitle("Clear")
+```
+
+# trends
+```{r}
+trends_clear <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]]) %>% 
+  rbind(c("Annual", sens.slope(year_dew_clear$avg_dew, conf.level = 0.95)[["estimates"]], sens.slope(year_dew_clear$avg_dew, conf.level = 0.95)[["p.value"]]))
+```
+
+
+

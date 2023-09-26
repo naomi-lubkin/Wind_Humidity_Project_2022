@@ -20,122 +20,221 @@ library(readr)
 ```{r}
 rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") %>% 
   filter(year(date) >= 1941)
+
+# creating fog data set, fog is true when RH = 100%
+fog <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(season, fog, tod, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season, tod, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, tod, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+fog_overall <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(fog, tod, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(tod, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, tod, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
 ```
 
 
-# RH diurnal analysis
+# Diurnal analysis
 ```{r}
 # times: 1:00 (night), 7:00 (day), 13:00 (day), 19:00 (night)
 
-# adding in day vs. night and seasons column
-rh <- rh %>% 
-  mutate(tod = case_when(
-           hour(date) == 1 ~ "Night",
-           hour(date) == 19 ~ "Night",
-           hour(date) == 7 ~ "Day",
-           hour(date) == 13 ~ "Day",
-           TRUE ~ NA_character_)) %>% 
-  mutate(season = case_when(month(date) == 12 ~ "Winter", 
-                            month(date) == 1 ~ "Winter", 
-                            month(date) == 2 ~ "Winter", 
-                            month(date) == 3 ~ "Spring", 
-                            month(date) == 4 ~ "Spring",
-                            month(date) == 5 ~ "Spring",
-                            month(date) == 6 ~ "Summer",
-                            month(date) == 7 ~ "Summer",
-                            month(date) == 8 ~ "Summer",
-                            month(date) == 9 ~ "Fall",
-                            month(date) == 10 ~ "Fall",
-                            month(date) == 11 ~ "Fall"))
-
-# is there a diurnal distinction? Yes.
+# is there a diurnal distinction? 
 tod_stats <- rh %>% 
   group_by(season) %>% 
-  summarize(p = t.test(RH ~ tod)[["p.value"]])
+  summarize(p_rh = t.test(RH ~ tod)[["p.value"]],
+            p_dew = t.test(dewpoint ~ tod)[["p.value"]],
+            p_mr = t.test(mixing_ratio ~ tod)[["p.value"]],
+            p_temp = t.test(dry_bulb ~ tod)[["p.value"]])
+```
 
-# diurnal trends graph
-avg_hour <- rh %>% 
-  group_by(season, year = year(date), hour = hour(date)) %>% 
-  summarize(avg = mean(RH)) 
-  
-ggplot(avg_hour, aes(x = year, y = avg, color = as.factor(hour))) +
+
+#Getting averages
+```{r}
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- rh %>% 
+  group_by(date(date), month, season, year_for_winter, tod) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter, tod) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year = year_for_winter, tod) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>%  # get seasonal avg from monthly avg
+  full_join(fog) %>% 
+  na.omit()
+
+# getting averages (daily, monthly, yearly)
+year_rh <- rh %>% 
+  group_by(date(date), month, season, year, tod) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year, tod) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year, tod) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>% # get yearly avg from monthly avg
+  full_join(fog_overall)
+
+```
+
+
+```{r}
+## diurnal trends graph - seasonal
+#rh
+ggplot(season_summary, aes(x = year, y = avg_RH, color = tod)) +
   geom_smooth(method = "lm", se = F) +
   #geom_point()  +
   facet_wrap(~season)
 
-# synoptic trends plot
-trends <- avg_hour %>% 
-  group_by(season, hour) %>% 
-  summarize(trend = sens.slope(avg, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
-            p = sens.slope(avg, conf.level = 0.95)[["p.value"]])
-ggplot(trends, aes(x= hour, y = trend, fill = season)) +
-  geom_col(position = "dodge")
+#dew point
+ggplot(season_summary, aes(x = year, y = avg_dew, color = tod)) +
+  geom_smooth(method = "lm", se = F) +
+  #geom_point()  +
+  facet_wrap(~season)
 
+#mixing ratio
+ggplot(season_summary, aes(x = year, y = avg_mr, color = tod)) +
+  geom_smooth(method = "lm", se = F) +
+  #geom_point()  +
+  facet_wrap(~season)
 
-avg_tod <- rh %>% 
-  mutate(season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  group_by(season, year = year(date), tod) %>% 
-  summarize(avg = mean(RH))  
+#temperature
+ggplot(season_summary, aes(x = year, y = avg_temp, color = tod)) +
+  geom_smooth(method = "lm", se = F) +
+  #geom_point()  +
+  facet_wrap(~season)
 
-# time of day trends plot: seasons
-trends_rh <- avg_tod %>% 
-  group_by(season, tod) %>% 
-  summarize(trend = sens.slope(avg, conf.level = 0.95)[["estimates"]][["Sen's slope"]], 
-            p = sens.slope(avg, conf.level = 0.95)[["p.value"]]) %>% 
-  mutate(sig = ifelse(p <= 0.05, "Y", "N"))
-
-rh_day_night <- ggplot(trends_rh, aes(x= tod, y = trend, fill = season)) +
-  geom_col(position = "dodge", color = "black") +
-  scale_fill_manual(values = c("gray", "gray", "white", "gray")) +
-  labs(x = "", y = "Annual trend", title = "Relative Humidity Trends in the Day and Night", subtitle = "1941-2022", caption = "Grey indicates 95% confidence, white indicates non-significance.") +
-  theme_minimal()
-
-
-ggsave(filename = "Figures/rh_day_night_trends.jpeg", plot = rh_day_night, width = 8, height = 5, dpi = 300)
-
-
-
-# Daily shifts plot
-rh %>% 
-  group_by(season, hour = hour(date)) %>% 
-  summarize(avg = mean(RH)) %>% 
-  ggplot(aes(x = hour, y = avg, color = season)) +
-  geom_smooth() 
-
+#fog frequency
+ggplot(season_summary, aes(x = year, y = ff, color = tod)) +
+  geom_smooth(method = "lm", se = F) +
+  #geom_point()  +
+  facet_wrap(~season)
 ```
-RH trends (to be combined with RH table in humidity_analysis.rmd)
+
+#Trends table
 ```{r}
-#seasonal
-trends_rh
+# Diurnal trends
 
-#annual
-trends_rh_annual <- avg_tod %>% 
-  group_by(tod) %>% 
-  summarize(trend = sens.slope(avg, conf.level = 0.95)[["estimates"]][["Sen's slope"]], 
-            p = sens.slope(avg, conf.level = 0.95)[["p.value"]]) %>% 
-  mutate(sig = ifelse(p <= 0.05, "Y", "N"), season = "Annual")
+trends_rh <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(avg_RH, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_RH, conf.level = 0.95)[["p.value"]],
+            measure = "rh") %>% 
+  rbind(year_rh %>%
+  group_by(tod) %>%
+  summarize(trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "rh"))
 
-#combine
-trends_diurnal_rh <- rbind(trends_rh_annual, trends_rh)
+trends_mr <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]],
+            measure = "mr") %>% 
+  rbind(year_rh %>%
+  group_by(tod) %>%
+  summarize(trend = sens.slope(avg_mr, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_mr, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "mr"))
 
-# put in figures folder to combine with rh
-write.csv(trends_diurnal_rh, file = "Figures/trends_diurnal_rh.csv")
+trends_dew <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]],
+            measure = "dew") %>% 
+  rbind(year_rh %>%
+  group_by(tod) %>%
+  summarize(trend = sens.slope(avg_dew, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_dew, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "dew"))
 
+trends_temp <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]],
+            measure = "temp") %>% 
+  rbind(year_rh %>%
+  group_by(tod) %>%
+  summarize(trend = sens.slope(avg_temp, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(avg_temp, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "temp"))
+
+trends_ff <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]],
+            measure = "ff") %>% 
+  rbind(year_rh %>%
+  group_by(tod) %>%
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(season = "Annual", measure = "ff"))
+
+
+
+trends <- rbind(trends_rh, trends_mr, trends_dew, trends_temp, trends_ff) %>% 
+  mutate(sig = ifelse(p <= 0.05, "Y", "N")) 
+
+write_csv(trends, file = "Figures/diurnal_humidity_trends.csv")
+```
+
+################################################################################################
+
+```{r}
+# rh_day_night <- ggplot(trends_rh, aes(x= tod, y = trend, fill = season)) +
+#   geom_col(position = "dodge", color = "black") +
+#   scale_fill_manual(values = c("gray", "gray", "white", "gray")) +
+#   labs(x = "", y = "Annual trend", title = "Relative Humidity Trends in the Day and Night", subtitle = "1941-2022", caption = "Grey indicates 95% confidence, white indicates non-significance.") +
+#   theme_minimal()
+# 
+# 
+# ggsave(filename = "Figures/rh_day_night_trends.jpeg", plot = rh_day_night, width = 8, height = 5, dpi = 300)
+# 
+# 
+# 
+# # Daily shifts plot
+# rh %>% 
+#   group_by(season, hour = hour(date)) %>% 
+#   summarize(avg_rh = mean(RH)) %>% 
+#   ggplot(aes(x = hour, y = avg_rh, color = season)) +
+#   geom_smooth() 
+# 
+# rh %>% 
+#   group_by(season, hour = hour(date)) %>% 
+#   summarize(avg_dew = mean(dewpoint)) %>% 
+#   ggplot(aes(x = hour, y = avg_dew, color = season)) +
+#   geom_smooth() +
+#   geom_point()
 ```
 
 
 # Fog Frequency diurnal analysis
-
 ```{r}
-# creating fog data set, fog is true when RH = 100%
-fog <- rh %>% 
-  mutate(fog = ifelse(RH == 100, "Y", "N")) %>% 
-  group_by(season, fog, tod, year = year(date)) %>% 
-  summarise(n_class = n()) %>% # get number of fog and clear days
-  group_by(season) %>% 
-  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
-  summarise(ff = n_class/n_season, fog = fog, tod, year) %>% 
-  filter(fog == "Y")
 
 #overall plot
 ggplot(fog, aes(x = year, y = ff, color = season)) +
@@ -144,20 +243,21 @@ ggplot(fog, aes(x = year, y = ff, color = season)) +
   geom_smooth(method = "lm", se = F)
 
 # something weird is happening with fall daytime trends
-fog %>% 
-  filter(season == "Fall", tod == "Day") %>% 
+fog %>%
+  filter(tod == "Day") %>%
   ggplot(aes(x = year, y = ff))+
   geom_point() +
-  geom_smooth(se = F)
+  geom_smooth(se = F) +
+  facet_wrap(~season)
 
 
 
 # trend data
-trends_fog <- fog %>% 
-  group_by(season, tod) %>% 
-  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]], 
-            p = sens.slope(ff, conf.level = 0.95)[["p.value"]]) %>% 
-  mutate(sig = ifelse(p <= 0.05, "Y", "N")) 
+trends_fog <- fog %>%
+  group_by(season, tod) %>%
+  summarize(trend = sens.slope(ff, conf.level = 0.95)[["estimates"]][["Sen's slope"]],
+            p = sens.slope(ff, conf.level = 0.95)[["p.value"]]) %>%
+  mutate(sig = ifelse(p <= 0.05, "Y", "N"))
 
 fog_day_night <- ggplot(trends_fog, aes(x= tod, y = trend, fill = season)) +
   geom_col(position = "dodge", color = "black") +
@@ -166,12 +266,35 @@ fog_day_night <- ggplot(trends_fog, aes(x= tod, y = trend, fill = season)) +
   theme_minimal()
 
 # Summer daytime is only significant trend in ff shifts
-fog %>% 
-  filter(season == "Summer", tod == "Day") %>% 
+fog %>%
+  filter(season == "Summer", tod == "Day") %>%
   ggplot(aes(x = year, y = ff)) +
   geom_point() +
   geom_smooth(method = "lm", se = F)
 
+```
 
+
+
+```{r}
+#RH
+season_summary %>%
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>%
+  ggplot(aes(x = avg_RH, fill = tod)) + geom_density(alpha = 0.5) + theme_classic() +facet_wrap(~season)
+
+#mixing ratio
+season_summary %>%
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>%
+  ggplot(aes(x = avg_mr, fill = tod)) + geom_density(alpha = 0.5) + theme_classic() +facet_wrap(~season)
+
+#dewpoint
+season_summary %>%
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>%
+  ggplot(aes(x = avg_dew, fill = tod)) + geom_density(alpha = 0.5) + theme_classic() +facet_wrap(~season)
+
+#temp
+season_summary %>%
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>%
+  ggplot(aes(x = avg_temp, fill = tod)) + geom_density(alpha = 0.5) + theme_classic() +facet_wrap(~season)
 ```
 

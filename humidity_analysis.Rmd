@@ -57,12 +57,13 @@ synoptic <- synoptic %>%
 
 
 
-# Calculate Relative Humidity 
-Calculations from WMO annex 4.B
+# Calculate Relative Humidity and other metrics (Saturation vapor pressure, dewpoint, mixing ratio)
+Calculations from WMO annex 4.B, mixing ratio equation from American Meterology Society glossary
 Methods for calculation are based on those from Seidel (2007)
 ```{r}
 ## Liquid calculations
 
+#rh
 rh_liquid <- function(t, tw, p){
   f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p) 
   
@@ -76,13 +77,55 @@ rh_liquid <- function(t, tw, p){
   return(100*vap_p/sat_vap_moist)
 }
 
+#saturation vapor pressure
+sat_vap_liquid <- function(t) {
+  return(6.112*(exp((17.62*t)/(243.12+t))))
+}
+
+#vapour pressure
+vap <- function(t, tw, p){
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p) 
+  
+  sat_vap_pure_from_tw = 6.112*(exp((17.62*tw)/(243.12+tw)))
+  
+  return(sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw))
+}
+
+
+#dewpoint
+dewpoint <- function(t, tw, p) {
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
+  
+  sat_vap_pure = 6.112*(exp((17.62*t)/(243.12+t)))
+  sat_vap_pure_from_tw = 6.112*(exp((17.62*tw)/(243.12+tw)))
+  
+  vap_p = sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw)
+  
+  return((243.12*log(vap_p/(6.112*f_p)))/(17.62-log(vap_p/(6.112*f_p))))
+}
+
+#mixing ratio
+mixing_ratio <- function(t, tw, p) {
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
+  sat_vap_pure_from_tw = 6.112*(exp((17.62*tw)/(243.12+tw)))
+  vap_p = sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw)
+  
+  return((0.622*vap_p)/(p-vap_p))
+}
+
+
 liquid <- synoptic %>% 
   filter(dry_bulb >= 0) %>% # Seidel's threshold
-  mutate(RH = rh_liquid(dry_bulb, wet_bulb, pressure_mb))
+  mutate(RH = rh_liquid(dry_bulb, wet_bulb, pressure_mb),
+         sat_vap = sat_vap_liquid(dry_bulb),
+         dewpoint = dewpoint(dry_bulb, wet_bulb, pressure_mb),
+         vap = vap(dry_bulb, wet_bulb, pressure_mb),
+         mixing_ratio = mixing_ratio(dry_bulb, wet_bulb, pressure_mb))
 
 
 ## Ice calculations
 
+#rh
 rh_ice <- function(t, tw, p) {
   f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
   
@@ -96,10 +139,48 @@ rh_ice <- function(t, tw, p) {
   return(100*vap_p/sat_vap_moist)
 }
 
+#saturation vapour pressure
+sat_vap_ice <- function(t) {
+  return(6.112*(exp((22.46*t)/(272.62+t))))
+}
+
+#vapour pressure
+vap <- function(t, tw, p) {
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
+  
+  sat_vap_pure_from_tw = 6.112*(exp((22.46*tw)/(272.62+tw)))
+  
+  return(sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw)) # Seidel (2007) used psychometric formula for liquid water for both water and ice
+}
+
+#dewpoint
+dewpoint <- function(t, tw, p) {
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
+  
+  sat_vap_pure = 6.112*(exp((22.46*t)/(272.62+t)))
+  sat_vap_pure_from_tw = 6.112*(exp((22.46*tw)/(272.62+tw)))
+  
+  vap_p = sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw)
+  
+  return((243.12*log(vap_p/(6.112*f_p)))/(17.62-log(vap_p/(6.112*f_p))))
+}
+
+#mixing ratio
+mixing_ratio <- function(t, tw, p) {
+  f_p = 1.0016 + (3.15*(10^-6)*p) - (0.074/p)
+  sat_vap_pure_from_tw = 6.112*(exp((22.46*tw)/(272.62+tw)))
+  vap_p = sat_vap_pure_from_tw*f_p - 6.53*10^-4*(1+0.000944*tw)*p*(t-tw)
+  
+  return((0.622*vap_p)/(p-vap_p))
+}
+
 ice <- synoptic %>% 
   filter(dry_bulb < 0) %>% # Seidel's threshold
-  mutate(RH = rh_ice(dry_bulb, wet_bulb, pressure_mb))
-
+  mutate(RH = rh_ice(dry_bulb, wet_bulb, pressure_mb),
+         sat_vap = sat_vap_ice(dry_bulb),
+         dewpoint = dewpoint(dry_bulb, wet_bulb, pressure_mb), 
+         vap = vap(dry_bulb, wet_bulb, pressure_mb),
+         mixing_ratio = mixing_ratio(dry_bulb, wet_bulb, pressure_mb))
 
 # Combining
 rh <- rbind(liquid, ice)
@@ -108,27 +189,21 @@ rh <- rbind(liquid, ice)
 
 # Quality control
 summary(rh$RH) # 3 NAs
+summary(rh$sat_vap)
+summary(rh$dewpoint) # 290 NA's
+summary(rh$vap)
+summary(rh$mixing_ratio) # 3 NA's
 
 nrow(rh[rh$RH<0,]) # 290 negative rh
+nrow(rh[rh$vap<0,]) # 290 negative vap
 
 rh <- rh %>% 
   na.omit() %>% 
-  filter(RH >= 0)
+  filter(RH >= 0) # filter out negative RH (and vap p by association)
 
-
-# Export dataset 
-write.csv(rh, file = "Data/rh_from_humidity_analysis_rmd.csv")
-
-rh <- rh %>% 
-  filter(year(date) >= 1941)
-```
-
-
-
-# Separate by seasons
-```{r}
+# Add seasons 
 # seasons by month: so winter is 12 and 1-2, spring is 3-5, summer is 6-8, fall is 9-11
-season_rh <- rh %>% 
+rh <- rh %>% 
   na.omit() %>% 
   mutate(year = year(date), 
          month = month(date), 
@@ -148,217 +223,97 @@ season_rh <- rh %>%
            month == 9 ~ "Fall",
            month == 10 ~ "Fall",
            month == 11 ~ "Fall",
+           TRUE ~ NA_character_)) %>% 
+  mutate(tod = case_when(
+           hour(date) == 1 ~ "Night",
+           hour(date) == 19 ~ "Night",
+           hour(date) == 7 ~ "Day",
+           hour(date) == 13 ~ "Day",
            TRUE ~ NA_character_))
 
 
+# Export dataset 
+write.csv(rh, file = "Data/rh_from_humidity_analysis_rmd.csv")
 
+rh <- rh %>% 
+  filter(year(date) >= 1941)
+```
+
+
+
+# Averaging
+```{r}
 # Getting averages first with daily, then monthly, then seasonal
-season_summary <- season_rh %>% 
+season_summary <- rh %>% 
   group_by(date(date), month, season, year_for_winter) %>% 
-  summarize(daily_average_RH = mean(RH)) %>% # first get daily averages
+  summarize(daily_average_RH = mean(RH),
+            daily_average_sat_vap = mean(sat_vap)) %>% # first get daily averages
   group_by(month, season, year_for_winter) %>% 
-  summarize(monthly_average_RH = mean(daily_average_RH)) %>% # get monthly avg from daily avg
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_sat_vap = mean(daily_average_sat_vap)) %>% # get monthly avg from daily avg
   group_by(season, year_for_winter) %>% 
-  summarize(average_RH = mean(monthly_average_RH)) # get seasonal avg from monthly avg
+  summarize(average_RH = mean(monthly_average_RH),
+            average_sat_vap = mean(monthly_average_sat_vap)) # get seasonal avg from monthly avg
   
 
-# comparing with Seidel
+# comparing with Seidel 2007
 season_summary %>% 
   filter(year_for_winter <= 2004) %>% 
   group_by(season) %>% 
   summarize(avg = mean(average_RH))
 
-# Fewer observations 1935-1939
-ggplot(season_rh, aes(x = year, fill = season)) + geom_bar()
-
-season_rh %>% 
-  group_by(year) %>% 
-  summarize(counts = n())
-
 
 # Clear day differences in seasons
 pdf(file = "Figures/rh_density_plot.pdf", width = 8, height = 5)
-season_rh %>% 
+rh %>% 
   filter(RH < 100) %>% 
   mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  ggplot(aes(x = RH, fill = season, color = season)) + geom_density(alpha = 0.5) + theme_classic() 
+  ggplot(aes(x = RH, fill = season, color = season)) + geom_density(alpha = 0.5) + 
+  theme_classic() +
+  labs(x = "Relative Humidity (%)", y = "Density")
 dev.off()
+
+rh %>% 
+  filter(RH < 100) %>% 
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
+  ggplot(aes(x = dewpoint, fill = season, color = season)) + geom_density(alpha = 0.5) + 
+  theme_classic()
+
+rh %>% 
+  filter(RH < 100) %>% 
+  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
+  ggplot(aes(x = dewpoint, fill = season, color = season)) + geom_density(alpha = 0.5) + 
+  theme_classic()
 ```
 
 
 # Seasonal comparisons
 
 ```{r}
-## Linear regression of seasonal data for all season 1935 - 2022, using seasonal averages
-
-# fall
-fall_rh <- season_summary %>% 
-  filter(season == "Fall") # isolate fall data
-
-fall.lm = lm(average_RH ~ year_for_winter, data = fall_rh)
-summary(fall.lm)
-
-# spring
-spring_rh <- season_summary %>% 
-  filter(season == "Spring") # isolate spring data
-
-spring.lm = lm(average_RH ~ year_for_winter, data = spring_rh)
-summary(spring.lm)
-
-# summer
-summer_rh <- season_summary %>% 
-  filter(season == "Summer") # isolate summer data
-
-summer.lm = lm(average_RH ~ year_for_winter, data = summer_rh)
-summary(summer.lm)
-
-# winter
-winter_rh <- season_summary %>% 
-  filter(season == "Winter") # isolate winter data
-
-winter.lm = lm(average_RH ~ year_for_winter, data = winter_rh)
-summary(winter.lm)
-
-
-
-
 ## Sen Slopes for seasons
 
-# Fall
-fall.sen <- sens.slope(fall_rh$average_RH, conf.level = 0.95)
-#View(fall.sen)
-fall.sen[["p.value"]]
-
-# Winter
-winter.sen <- sens.slope(winter_rh$average_RH, conf.level = 0.95)
-#View(winter.sen)
-winter.sen[["p.value"]] 
-
-# Spring
-spring.sen <- sens.slope(spring_rh$average_RH, conf.level = 0.95)
-#View(spring.sen)
-spring.sen[["p.value"]] 
-
-# Summer
-summer.sen <- sens.slope(summer_rh$average_RH, conf.level = 0.95)
-#View(summer.sen)
-summer.sen[["p.value"]] 
-
+# Sen's slope
+trends <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(trend = sens.slope(average_RH, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(average_RH, conf.level = 0.95)[["p.value"]])
 
 ## VISUALS
 
 # all seasons on one graph
-pdf(file = "Figures/humidities_seasons.pdf")
-season_summary %>% 
+season_plot <- season_summary %>% 
   ggplot(aes(year_for_winter, average_RH, color = season)) +
   geom_point() +
   geom_smooth(method = lm, se = FALSE) +
   facet_wrap(~season) +
   labs(title = "Average Relative Humidities by Season", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)", caption = "Note: Winter graph groups winter months consecutively (e.g. December of 1996, January of 1997, and February of 1997)") 
-dev.off()
 
-# spring
-pdf(file = "Figures/humidities_spring_1935.pdf", width = 8, height = 5)
-spring_rh %>% 
-  ggplot(aes(year_for_winter, average_RH)) +
-  geom_point() +
-  geom_smooth(method = lm, se = FALSE, color = "grey") +
-  theme_minimal() +
-  labs(title = "Average Relative Humidities in Spring", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") +
-  annotate("text", x=2015, y=92, label = paste("p-value =", round((spring.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=93, label = paste("Sen's Slope =", round((spring.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
-dev.off()
-
-
-# winter
-pdf(file = "Figures/humidities_winter_1935.pdf", width = 8, height = 5)
-winter_rh %>% 
-  ggplot(aes(year_for_winter, average_RH)) +
-  geom_point() +
-  geom_smooth(method = lm, se = FALSE, color = "grey") +
-  theme_minimal() +
-  labs(title = "Average Relative Humidities in Winter", subtitle = "1935-2022", x = "Year", y = "Relative Humidity (%)") +
-  annotate("text", x=2015, y=90.8, label = paste("p-value =", round((winter.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=92, label = paste("Sen's Slope =", round((winter.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
-dev.off()
+ggsave(season_plot, file = "Figures/humidities_seasons.jpeg", width = 8, height = 5, dpi = 30)
 ```
 
-Spring is showing significant trends, but with very small slope
-
-# Monthly comparisons, focusing on November 
-```{r}
-rh <- rh %>% 
-  mutate(month = month(date), year = year(date))
-
-month_rh <- rh %>% 
-  group_by(date(date), month, year) %>% # get daily averages first
-  summarize(average_RH = mean(RH)) %>% 
-  group_by(month, year) %>% # get monthly averages from daily avgs
-  summarize(average_RH = mean(average_RH))
-
-# overview of all months
-ggplot(month_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~month)
 
 
-# RH by month
-ggplot(month_rh, aes(as.factor(month), average_RH)) + 
-  geom_boxplot() + 
-  theme_bw() +
-  labs(x = "Month", y = "Relative Humidity (%)") +
-  ggtitle("Average Relative Humidity by Month 1935-2022")
-
-# November sen slopes
-nov_rh <- month_rh %>% 
-  filter(month == 11) 
-
-ggplot(nov_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
-
-nov.lm = lm(average_RH ~ year, data = nov_rh)
-summary(nov.lm)
-
-
-nov.sen <- sens.slope(nov_rh$average_RH, conf.level = 0.95)
-#View(nov.sen)
-nov.sen[["p.value"]] 
-
-# June
-june_rh <- month_rh %>% 
-  filter(month == 6) 
-
-ggplot(june_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
-
-june.lm = lm(average_RH ~ year, data = june_rh)
-summary(june.lm)
-
-
-# September
-sept_rh <- month_rh %>% 
-  filter(month == 9) 
-
-ggplot(sept_rh, aes(year, average_RH)) + geom_point() + geom_smooth(method = lm)
-
-sept.lm = lm(average_RH ~ year, data = sept_rh)
-summary(sept.lm)
-
-
-sept.sen <- sens.slope(sept_rh$average_RH, conf.level = 0.95)
-#View(sept.sen)
-sept.sen[["p.value"]] 
-
-
-# checking with Seidel 2007
-rh %>% 
-  filter(year(date) <= 2004) %>% 
-  summarize(avg = mean(RH))
-
-rh %>% 
-  filter(year(date) <= 2004) %>% 
-  filter(month(date) == 6 | month(date) == 7 | month(date) == 8) %>% # for JJA
-  summarize(avg = mean(RH))
-
-
-```
-
+# Month plot: summary
 ```{r}
 # adding names to months
 month_rh <- month_rh %>% 
@@ -392,289 +347,40 @@ dev.off()
 
 
 # Improving visual
-
 ```{r}
-# JANUARY
-jan_rh <- month_rh %>% 
-  filter(month == 1) 
-
-jan <- ggplot(jan_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("January") + 
+month_rh %>%
+  ggplot(aes(year, average_RH)) +
+  facet_wrap(~month_name) +
+  geom_point() +
+  geom_smooth(method = lm, se = F) +
   labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-jan.sen <- sens.slope(jan_rh$average_RH, conf.level = 0.95)
-#View(jan.sen)
-jan.sen[["p.value"]] 
-
-
-
-
-
-
-# FEBRUARY
-feb_rh <- month_rh %>% 
-  filter(month == 2) 
-
-feb <- ggplot(feb_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("February") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-feb.sen <- sens.slope(feb_rh$average_RH, conf.level = 0.95)
-#View(feb.sen)
-feb.sen[["p.value"]] 
-
-
-
-
-
-
-
-# MARCH
-mar_rh <- month_rh %>% 
-  filter(month == 3) 
-
-mar <- ggplot(mar_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("March") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-
-mar.sen <- sens.slope(mar_rh$average_RH, conf.level = 0.95)
-#View(mar.sen)
-mar.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-
-
-# APRIL
-apr_rh <- month_rh %>% 
-  filter(month == 4) 
-
-apr <- ggplot(apr_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("April") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-
-apr.sen <- sens.slope(apr_rh$average_RH, conf.level = 0.95)
-#View(apr.sen)
-apr.sen[["p.value"]] 
-
-
-
-
-
-
-
-# MAY
-may_rh <- month_rh %>% 
-  filter(month == 5) 
-
-may <- ggplot(may_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("May") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-
-may.sen <- sens.slope(may_rh$average_RH, conf.level = 0.95)
-#View(may.sen)
-may.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-# JUNE
-jun_rh <- month_rh %>% 
-  filter(month == 6) 
-
-jun <- ggplot(jun_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("June") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-jun.sen <- sens.slope(jun_rh$average_RH, conf.level = 0.95)
-#View(jun.sen)
-jun.sen[["p.value"]] 
-
-
-
-
-
-# JULY
-jul_rh <- month_rh %>% 
-  filter(month == 7) 
-
-jul <- ggplot(jul_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("July") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-jul.sen <- sens.slope(jul_rh$average_RH, conf.level = 0.95)
-#View(jul.sen)
-jul.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-# AUGUST
-aug_rh <- month_rh %>% 
-  filter(month == 8) 
-
-aug <- ggplot(aug_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("August") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-aug.sen <- sens.slope(aug_rh$average_RH, conf.level = 0.95)
-#View(aug.sen)
-aug.sen[["p.value"]] 
-
-
-
-
-
-
-
-# SEPTEMEBR
-sep_rh <- month_rh %>% 
-  filter(month == 9) 
-
-sep <- ggplot(sep_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("September") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-sep.sen <- sens.slope(sep_rh$average_RH, conf.level = 0.95)
-#View(sep.sen)
-sep.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-
-# OCTOBER
-oct_rh <- month_rh %>% 
-  filter(month == 10) 
-
-oct <- ggplot(oct_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("October") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-oct.sen <- sens.slope(oct_rh$average_RH, conf.level = 0.95)
-#View(oct.sen)
-oct.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-
-
-
-
-# NOVEMBER
-nov_rh <- month_rh %>% 
-  filter(month == 11) 
-
-nov <- ggplot(nov_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("November") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-nov.sen <- sens.slope(nov_rh$average_RH, conf.level = 0.95)
-#View(nov.sen)
-nov.sen[["p.value"]] 
-
-
-
-
-
-
-
-
-
-
-
-
-# DECEMBER
-dec_rh <- month_rh %>% 
-  filter(month == 12) 
-
-dec <- ggplot(dec_rh, aes(year, average_RH)) + 
-  geom_point() + 
-  geom_smooth(method = lm, se = F) + 
-  ggtitle("December") + 
-  labs (x = "Year", y = "Relative Humidity (%)") +
-  theme_minimal()
-
-dec.sen <- sens.slope(dec_rh$average_RH, conf.level = 0.95)
-#View(dec.sen)
-dec.sen[["p.value"]] 
-
-
-jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec
+  theme_minimal() 
+
+#trends 
+month_rh %>% 
+  group_by(month_name) %>% 
+  summarize(trend = sens.slope(average_RH, conf.level = 0.95)[["estimates"]],
+            p = sens.slope(average_RH, conf.level = 0.95)[["p.value"]])
 ```
 
-# Overall RH over years (not split by month)
+# Overall RH over years 
 ```{r}
 # getting averages 
-year_rh <- season_rh %>% 
+year_rh <- rh %>% 
   group_by(date(date), month, season, year) %>% 
-  summarize(daily_average_RH = mean(RH)) %>% # first get daily averages
+  summarize(daily_average_RH = mean(RH),
+            daily_average_sat_vap = mean(sat_vap)) %>% # first get daily averages
   group_by(month, season, year) %>% 
-  summarize(monthly_average_RH = mean(daily_average_RH)) %>% # get monthly avg from daily avg
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_sat_vap = mean(daily_average_sat_vap)) %>% # get monthly avg from daily avg
   group_by(year) %>% 
-  summarize(avg_rh = mean(monthly_average_RH)) # get yearly avg from monthly avg
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_sat_vap = mean(monthly_average_sat_vap)) # get yearly avg from monthly avg
 
 # overall average 1941 - 2022
 year_rh %>% 
   summarize(avg_rh = mean(avg_rh))
+
 
 pdf(file = "Figures/rh_annual_1941.pdf", width = 8, height = 5)
 year.sen <- sens.slope(year_rh$avg_rh, conf.level = 0.95)
@@ -702,7 +408,7 @@ rh_all_fig <- ggplot(year_rh, aes(year, avg_rh)) +
   annotate("text", x=2015, y=97, label = paste("p-value =", round((year.sen[["p.value"]]), digits = 3))) +
   annotate("text", x=2015, y=99, label = paste("Sen's Slope =", round((year.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
 
-temp <- season_rh %>% 
+temp <- rh %>% 
   group_by(date(date), month, season, year) %>% 
   summarize(daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
   group_by(month, season, year) %>% 
@@ -715,7 +421,12 @@ temp_fig <- ggplot(temp, aes(year, avg_temp)) +
   geom_smooth(method = "lm", se = F, color = "grey", size = 0.8) +
   theme_minimal()
 
-print(temp_fig/rh_all_fig)
+sat_vap_fig <- ggplot(year_rh, aes(year, avg_sat_vap)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = "grey", size = 0.8) +
+  theme_minimal()
+
+print(temp_fig/rh_all_fig/sat_vap_fig)
 ```
 
 
@@ -723,12 +434,12 @@ print(temp_fig/rh_all_fig)
 # In the clear vs. in the clouds
 ```{r}
 # adding fog and clear class
-season_rh <- season_rh %>% 
+rh <- rh %>% 
   mutate(Class = ifelse(RH == 100, "Fog", "Clear")) %>% 
   dplyr::select(date, RH, year, month, year_for_winter, season, Class)
 
 # filter for clear 
-clear <- season_rh %>% 
+clear <- rh %>% 
   filter(Class == "Clear") 
 
 # average RH each year
@@ -741,18 +452,6 @@ clear_summary <- clear %>%
 # average in the clear 1941 - 2022 
 clear_summary %>% 
   summarize(mean(avg_rh))
-# visual: dotplot
-pdf(file = "Figures/rh_in_the_clear.pdf", width = 8, height = 5)
-clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
-clear_summary %>% 
-  ggplot(aes(x = year, y = avg_rh)) + 
-  geom_point() +
-  geom_smooth(method = "lm", se = F, color = "grey") +
-  theme_minimal() +
-  labs(title = "Average Relative Humidity when in the Clear", subtitle = "1935-2022", x = "Year", y = "Average Relative Humidity (%)") + 
-  annotate("text", x=2015, y=75, label = paste("p-value =", round((clear.sen[["p.value"]]), digits = 3))) +
-  annotate("text", x=2015, y=76, label = paste("Sen's Slope =", round((clear.sen[["estimates"]][["Sen's slope"]]), digits = 3)))
-dev.off()
 
 # analysis (Sen's Slope)
 clear.sen <- sens.slope(clear_summary$avg_rh, conf.level = 0.95)
@@ -763,21 +462,20 @@ clear.sen[["conf.int"]]
 
 
 # clear vs all visual
-pdf(file = "Figures/rh_plot_by_class.pdf", width = 8, height = 5)
-rbind
-ggplot(year_rh, aes(x = year, y = avg_rh)) + 
+rh_clear_all <- ggplot(year_rh, aes(x = year, y = avg_rh)) + 
   geom_line(data = year_rh, aes(x = year, y = avg_rh), color = "grey50") + geom_smooth(data = year_rh, aes(x = year, y = avg_rh), method = "lm", se = F, color = "grey70", size = 0.5) + 
   geom_line(data = clear_summary, aes(x = year, y = avg_rh), color = "skyblue3", lty = "longdash") + geom_smooth(data = clear_summary, aes(x = year, y = avg_rh), method = "lm", se = F, color = "skyblue2", size = 0.5) +
   theme_minimal() + 
   labs(x = "Year", y = "Relative Humidity (%)", title = "Relative humidity overall and in the clear", subtitle = "1941-2022" )
-dev.off()
+
+ggsave(rh_clear_all, file = "Figures/rh_clear_all_plot.jpeg", width = 8, height = 5, dpi = 30)
 ```
 
 
 # Fog frequency
 ```{r}
 # Fog frequency by season: all days 1941-2022
-ff_seasonal <- season_rh %>% 
+ff_seasonal <- rh %>% 
   group_by(season, Class) %>% 
   summarise(n_class = n()) %>% # get number of fog and clear days
   group_by(season) %>% 
@@ -787,7 +485,7 @@ ff_seasonal <- season_rh %>%
 #what statistical test will look for significant differences between seasons?
 
 # overall fog frequency
-ff_overall <- season_rh %>% 
+ff_overall <- rh %>% 
   group_by(Class) %>% 
   summarise(n_class = n()) %>% 
   mutate(n_total = sum(n_class)) %>% 
@@ -806,7 +504,7 @@ dev.off()
 # trends
 
 # annual
-ff_annual <- season_rh %>% 
+ff_annual <- rh %>% 
   group_by(Class, year) %>% 
   summarise(n_class = n()) %>% 
   group_by(year) %>% 
@@ -822,7 +520,7 @@ ff_sen <- sens.slope(ff_annual$ff, conf.level = 0.95)
 
 
 # seasonal
-ff_seasonal <- season_rh %>% 
+ff_seasonal <- rh %>% 
   group_by(Class, year, season) %>% 
   summarise(n_class = n()) %>% 
   group_by(year, season) %>% 
@@ -868,121 +566,6 @@ ff_table <- ff_annual_trends_all %>%
   kable_classic(full_width = F, html_font = "Cambria")  
 
 save_kable(ff_table, file = "Figures/ff_table.pdf")
-
-```
-
-
-# Annual trend table 
-```{r}
-## Diurnal data
-## Overall data
-trends_diurnal_rh <- read_csv("Figures/trends_diurnal_rh.csv") %>% 
-  dplyr::select(2:6,)
-
-
-# calculate annual trends
-annual <- year_rh %>% 
-  summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
-            type = "Overall") 
-
-
-## Seasonal
-
-annual_season <- season_summary %>% 
-  mutate(avg_rh = average_RH, season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  group_by(season) %>% 
-  summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
-            type = "Overall") 
-
-
-
-## Clear Seasonal
-
-#overall
-annual_clear <- clear_summary %>% 
-  summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
-            type = "Clear") 
-#seasonal
-annual_season_clear <- clear %>% 
-  mutate(season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  group_by(date(date), month, season, year_for_winter) %>% 
-  summarize(avg_rh = mean(RH)) %>% #daily avg
-  group_by(month, season, year_for_winter) %>% 
-  summarize(avg_rh = mean(avg_rh)) %>% # monthly avg
-  group_by(season, year_for_winter) %>% 
-  summarize(avg_rh = mean(avg_rh)) %>%  # seasonal avg
-  group_by(season) %>% 
-  summarize(annual_trend = sens.slope(avg_rh, conf.level = 0.95)[["estimates"]],
-            p = sens.slope(avg_rh, conf.level = 0.95)[["p.value"]],
-            #conf_int_95 = sens.slope(avg_rh, conf.level = 0.95)[["conf.int"]],
-            type = "Clear") 
-
-
-#combine tables into one and make it look nice
-annual_trends_all <- bind_rows(annual, annual_season, annual_clear, annual_season_clear)  %>% 
-  mutate(Type = type, 
-         decadal_trend = annual_trend*10,
-         " " = ifelse(is.na(season), "Annual", as.character(season)),
-         decadal_trend = format(round(decadal_trend, 3), nsmall = 3), # round trend to 3 decimal places
-         "Decadal trend (%/decade)" = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend), # add asterisks
-         "p-value" = p) %>% 
-  dplyr::select(Type, " ", "Decadal trend (%/decade)") %>% 
-  distinct() %>%   # removes rows with repeat values
-  as.data.frame(html_table())
-
-
-# Making the table, KableExtra package
-rh_table <- annual_trends_all %>%
-  kbl(caption = "Decadal Trends of Relative Humidity from 1941-2022") %>%
-  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
-  kable_classic(full_width = F, html_font = "Cambria") %>% 
-  group_rows(group_label = "All", start_row = 1, end_row = 5, hline_after = T) %>% 
-  group_rows(group_label = "Clear", start_row = 6, end_row = 10) %>% 
-  add_indent(positions = 1:10, level_of_indent = 2, all_cols = T) 
-
-save_kable(rh_table, file = "Figures/humidity_table.pdf")
-
-
-
-# Another table, including Day and Night
-day <- trends_diurnal_rh %>% 
-  filter(tod == "Day") 
-night <- trends_diurnal_rh %>% 
-  filter(tod == "Night") 
-  
-a <- bind_cols(bind_rows(annual, annual_season), bind_rows(annual_clear, annual_season_clear), day, night) %>% 
-  mutate(season = ifelse(is.na(season...4), "Annual", as.character(season...4)),
-         decadal_trend_overall = annual_trend...1*10,
-         decadal_trend_clear = annual_trend...5*10,
-         decadal_trend_day = trend...10*10,
-         decadal_trend_night = trend...15*10,
-            decadal_trend_overall = format(round(decadal_trend_overall, 3), nsmall = 3), # round trend to 3 decimal places
-            decadal_trend_clear = format(round(decadal_trend_clear, 3), nsmall = 3),
-            decadal_trend_day = format(round(decadal_trend_day, 3), nsmall = 3),
-            decadal_trend_night = format(round(decadal_trend_night, 3), nsmall = 3),
-         decadal_trend_overall = ifelse(p...2 <= 0.05, str_c(decadal_trend_overall, "*"), decadal_trend_overall), # add asterisks
-         decadal_trend_clear = ifelse(p...6 <= 0.05, str_c(decadal_trend_clear, "*"), decadal_trend_clear), 
-         decadal_trend_day = ifelse(p...11 <= 0.05, str_c(decadal_trend_day, "*"), decadal_trend_day), # add asterisks
-         decadal_trend_night = ifelse(p...16 <= 0.05, str_c(decadal_trend_night, "*"), decadal_trend_night)) %>% 
-  dplyr::select(season, decadal_trend_overall, decadal_trend_clear, decadal_trend_day, decadal_trend_night)
-  
-
-b <- data.frame(stringsAsFactors = FALSE, a)
-names(x = b) <- c("Season", "Overall", "Clear", "Day", "Night")
-
-
-table <- b %>%
-  kbl(caption = "Decadal Trends of Relative Humidity (%/Decade) from 1941-2022") %>%
-  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate annual relative humidity trends")) %>% 
-  kable_classic(full_width = F, html_font = "Cambria")
-  
-save_kable(table, file = "Figures/humidity_table_diurnal.pdf")
 
 ```
 
