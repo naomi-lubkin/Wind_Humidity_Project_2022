@@ -273,17 +273,6 @@ rh %>%
   labs(x = "Relative Humidity (%)", y = "Density")
 dev.off()
 
-rh %>% 
-  filter(RH < 100) %>% 
-  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  ggplot(aes(x = dewpoint, fill = season, color = season)) + geom_density(alpha = 0.5) + 
-  theme_classic()
-
-rh %>% 
-  filter(RH < 100) %>% 
-  mutate(season = factor(season, c("Winter", "Spring", "Summer", "Fall"))) %>% 
-  ggplot(aes(x = dewpoint, fill = season, color = season)) + geom_density(alpha = 0.5) + 
-  theme_classic()
 ```
 
 
@@ -367,10 +356,10 @@ month_rh %>%
 ```{r}
 # getting averages 
 year_rh <- rh %>% 
-  group_by(date(date), month, season, year) %>% 
+  group_by(date(date), month, year) %>% 
   summarize(daily_average_RH = mean(RH),
             daily_average_sat_vap = mean(sat_vap)) %>% # first get daily averages
-  group_by(month, season, year) %>% 
+  group_by(month, year) %>% 
   summarize(monthly_average_RH = mean(daily_average_RH),
             monthly_average_sat_vap = mean(daily_average_sat_vap)) %>% # get monthly avg from daily avg
   group_by(year) %>% 

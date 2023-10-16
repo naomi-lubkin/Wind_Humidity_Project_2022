@@ -5,6 +5,8 @@ date: "2023-09-26"
 output: html_document
 ---
 
+Crafting the humidity metrics trends table, allowing all trends to be seen in one place.
+
 # Packages
 ```{r}
 library(tidyverse)
@@ -249,8 +251,8 @@ trends_clear <- rbind(trends_rh_clear, trends_mr_clear, trends_dew_clear, trends
 #combine tables into one and make it look nice
 trends <- bind_rows(trends_overall, trends_clear, trends_diurnal) %>% 
   mutate(decadal_trend = trend*10,
-         decadal_trend = ifelse(abs(decadal_trend) > 0.001, format(round(decadal_trend, 3), nsmall = 3),format(round(decadal_trend,0), nsmall = 0)),
-         decadal_trend = ifelse(p <= 0.05, str_c(decadal_trend, "*"), decadal_trend)) %>% 
+         decadal_trend = ifelse(measure != "mr", ifelse(abs(decadal_trend) > 0.001, format(round(decadal_trend, 3), nsmall = 3),format(round(decadal_trend,0), nsmall = 0)),format(round(decadal_trend, 6), nsmall = 6)),
+         decadal_trend = ifelse(p <= 0.05, str_c(decadal_trend, "*"), ifelse(p<=0.1, str_c(decadal_trend, "\u2020"), decadal_trend))) %>% 
   dplyr::select(!c(p, trend, sig)) %>% 
   pivot_wider(names_from = measure, values_from = decadal_trend) %>% 
   mutate(class = factor(class, levels =c("overall", "Clear", "Day", "Night")),
@@ -271,7 +273,7 @@ trends_table <- trends %>%
   pack_rows("Day", 11,15) %>% 
   pack_rows("Night", 16,20) %>% 
   kable_classic(full_width = F, html_font = "Cambria") %>%
-  footnote(general = c("*indicates 95% confidence", "Sen's Slope analysis used to calculate trends"))
+  footnote(general = c("*indicates 95% confidence", "\u2020indicates 90% confidence", "Sen's Slope analysis used to calculate trends"))
 
 save_kable(trends_table, file = "Figures/trends_all_humidity_metrics.pdf")
 ```

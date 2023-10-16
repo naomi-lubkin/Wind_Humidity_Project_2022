@@ -21,9 +21,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 #Data
 ```{r}
-mr <- read_csv("Data/rh_from_humidity_analysis_rmd.csv")
+mr <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") %>% 
+  filter(year(date) >= 1941)
 mr_clear <- mr %>% 
-  filter(RH < 100)
+  filter(RH < 100) 
 ```
 #Getting averages
 ```{r}
