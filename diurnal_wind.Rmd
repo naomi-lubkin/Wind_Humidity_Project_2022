@@ -31,9 +31,9 @@ speed <- hourly_wind %>%
   mutate(wind_speed = as.numeric(wind_speed)) %>%
   na.omit() %>%
   mutate(time = hour(time) + 1) %>% # rounding the hour
-  mutate(day_status = case_when (time >= 1 & time<6 ~"night", 
-                                 time >=6 & time<18 ~"day", 
-                                 time >= 18 ~ "night")) %>%
+  mutate(day_status = case_when (time >= 1 & time<=6 ~"night", 
+                                 time >6 & time<=18 ~"day", 
+                                 time > 18 ~ "night")) %>%
    mutate(month = month(date), 
          year = year(date)) %>%
    mutate(season = case_when(month == 12 ~ "Winter", 
@@ -85,9 +85,9 @@ direction <- hourly_direction %>%
   filter(year >= 1941) %>%
   na.omit() %>%
   mutate(time = hour(date) + 1) %>%
-  mutate(day_status = case_when (time >= 1 & time<6 ~"night", 
-                                 time >=6 & time<18 ~"day", 
-                                 time >= 18 ~ "night")) %>%
+  mutate(day_status = case_when (time >= 1 & time<=6 ~"night", 
+                                 time >6 & time<=18 ~"day", 
+                                 time > 18 ~ "night")) %>%
   filter(month == 12 | month == 1 | month== 2)
 
 
