@@ -5,7 +5,7 @@ date: '2022-06-06'
 output: html_document
 ---
 
-This rmd calculates relative humidity using WMO annex 4.B and analyzes its trends annually, seasonally, and monthly. The relative humidity is used to determine the presence of fog, and then fog frequency is calculated and analyzed.
+This rmd calculates relative humidity, mixing ratio, and dewpoint using WMO annex 4.B and the AMS Glossary and analyzes their trends annually, seasonally, and monthly. Relative humidity is used to determine the presence of fog, and then fog frequency is calculated and analyzed.
 
 
 #Load Packages
