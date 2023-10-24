@@ -1,0 +1,384 @@
+---
+title: "table_of_averages"
+author: "Larz von Huene and Naomi Lubkin"
+date: "2023-10-23"
+output: html_document
+---
+
+Using data from humidity_analysis.rmd and ____wind____, making a table of average climate variables at the summit.
+
+#Packages 
+```{r}
+library(tidyverse)
+library(kableExtra)
+```
+
+
+# Data
+```{r}
+# humidity vars
+rh <- read_csv("Data/rh_from_humidity_analysis_rmd.csv") %>% 
+  filter(year(date) >= 1941) %>% 
+  dplyr::select(!...1) %>% 
+  arrange(date)
+
+# wind
+hourly_wind_41_22 <- read_csv("Homogenization/wind_1941_2022_homogenized.csv") %>% 
+  dplyr::select(3:9,) %>% 
+  mutate(month = month(date),
+         year = year(date),
+         year_for_season =  case_when(month == 12 ~ year + 1, 
+                                  TRUE ~ year)) %>%
+  mutate(season = case_when(month == 12 ~ "Winter", 
+                            month == 1 ~ "Winter", 
+                            month == 2 ~ "Winter", 
+                            month == 3 ~ "Spring", 
+                            month == 4 ~ "Spring",
+                            month == 5 ~ "Spring",
+                            month == 6 ~ "Summer",
+                            month == 7 ~ "Summer",
+                            month == 8 ~ "Summer",
+                            month == 9 ~ "Fall",
+                            month == 10 ~ "Fall",
+                            month == 11 ~ "Fall")) %>% 
+  na.omit() %>% 
+  mutate(time = hour(time) + 1) %>% # rounding the hour
+  mutate(tod = case_when (time >= 1 & time<=6 ~"Night", 
+                                 time >6 & time<=18 ~"Day", 
+                                 time > 18 ~ "Night"))
+
+
+```
+
+# Getting Averages
+```{r}
+# Incorporate fog
+fog <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(season, fog, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+fog_overall <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(fog, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+# Overall
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- rh %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year = year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>% # get seasonal avg from monthly avg
+  full_join(fog) %>% 
+  na.omit()
+
+year_rh <- rh %>% 
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>%  # get yearly avg from monthly avg
+  full_join(fog_overall)
+
+# wind
+daily_avg <- hourly_wind_41_22 %>%
+  group_by(date) %>%
+  mutate(wind_speed = mean(homogenized_wind))  #averaging hourly wind speeds by day from homogenized data %>%
+
+
+seasonal_avg <- daily_avg %>%
+  group_by(month, season, year) %>%
+  summarise(wind_speed = mean(wind_speed), year_for_season = year_for_season) %>% # monthly avgs from daily
+  group_by(season, year = year_for_season) %>% 
+  summarise(wind_speed = mean(wind_speed))
+
+yearly_avg <- daily_avg %>% 
+  group_by(month, year) %>%
+  summarise(wind_speed = mean(wind_speed)) %>% # monthly avgs from daily
+  group_by(year) %>% 
+  summarise(wind_speed = mean(wind_speed))
+
+winds <- rbind(yearly_avg %>% 
+  summarize(wind = mean(wind_speed)) %>% 
+  mutate(season = "Annual", .before = 1),
+  seasonal_avg %>% 
+    group_by(season) %>% 
+    summarize(wind = mean(wind_speed)))
+
+
+
+#annual avg: 1941-2022
+annual_avg <- year_rh %>% 
+  summarize(rh = mean(avg_rh), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp),
+            ff = mean(ff)) %>% 
+  mutate(season = "Annual", .before = 1)
+
+#seasonal avg: 1941-2022
+seasonal_avg <- season_summary %>% 
+  group_by(season) %>% 
+  summarize(rh = mean(avg_RH), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp),
+            ff = mean(ff))
+
+avgs <- rbind(annual_avg, seasonal_avg) %>% 
+  full_join(winds, by = "season")
+```
+
+# Clear avgs
+```{r}
+season_summary_clear <- rh %>% 
+  filter(RH < 100) %>% 
+  group_by(date(date), month, season, year_for_winter) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year_for_winter) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get seasonal avg from monthly avg
+
+
+year_rh_clear <- rh %>%
+  filter(RH < 100) %>%
+  group_by(date(date), month, season, year) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) # get yearly avg from monthly avg
+
+#annual avg: 1941-2022
+annual_avg <- year_rh_clear %>% 
+  summarize(rh = mean(avg_rh), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp)) %>% 
+  mutate(season = "Annual", .before = 1)
+
+#seasonal avg: 1941-2022
+seasonal_avg <- season_summary_clear %>% 
+  group_by(season) %>% 
+  summarize(rh = mean(avg_RH), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp))
+
+avgs_clear <- rbind(annual_avg, seasonal_avg) 
+
+```
+
+
+# Diurnal avgs
+```{r}
+# creating fog data set, fog is true when RH = 100%
+fog <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(season, fog, tod, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(season, tod, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, tod, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+fog_overall <- rh %>%
+  mutate(fog = ifelse(RH == 100, "Y", "N")) %>%
+  group_by(fog, tod, year = year(date)) %>%
+  summarise(n_class = n()) %>% # get number of fog and clear days
+  group_by(tod, year) %>%
+  summarise(n_season = sum(n_class), n_class = n_class, fog = fog, tod, year) %>%  # get total number of days in season
+  summarise(ff = n_class/n_season, fog = fog, tod, year) %>%
+  filter(fog == "Y") %>% 
+  dplyr::select(!fog)
+
+# Getting averages first with daily, then monthly, then seasonal
+season_summary <- rh %>% 
+  group_by(date(date), month, season, year_for_winter, tod) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year_for_winter, tod) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(season, year = year_for_winter, tod) %>% 
+  summarize(avg_RH = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>%  # get seasonal avg from monthly avg
+  full_join(fog) %>% 
+  na.omit()
+
+# getting averages (daily, monthly, yearly)
+year_rh <- rh %>% 
+  group_by(date(date), month, season, year, tod) %>% 
+  summarize(daily_average_RH = mean(RH),
+            daily_average_dew = mean(dewpoint),
+            daily_average_mr = mean(mixing_ratio),
+            daily_average_temp = mean(dry_bulb)) %>% # first get daily averages
+  group_by(month, season, year, tod) %>% 
+  summarize(monthly_average_RH = mean(daily_average_RH),
+            monthly_average_dew = mean(daily_average_dew),
+            monthly_average_mr = mean(daily_average_mr),
+            monthly_average_temp = mean(daily_average_temp)) %>% # get monthly avg from daily avg
+  group_by(year, tod) %>% 
+  summarize(avg_rh = mean(monthly_average_RH),
+            avg_dew = mean(monthly_average_dew),
+            avg_mr = mean(monthly_average_mr),
+            avg_temp = mean(monthly_average_temp)) %>% # get yearly avg from monthly avg
+  full_join(fog_overall)
+
+#Wind
+speed_season <- hourly_wind_41_22 %>% 
+  group_by(season, date, tod) %>% 
+  summarize(wind_speed = mean(homogenized_wind)) %>% 
+  group_by(season, month = month(date), year =year(date), tod) %>% 
+  summarize(wind_speed = mean(wind_speed)) %>% 
+  group_by(season, year, tod) %>% 
+  summarize(wind_speed = mean(wind_speed))
+
+speed_year <- hourly_wind_41_22 %>%
+  group_by(date, tod) %>% 
+  summarize(wind_speed = mean(homogenized_wind)) %>% 
+  group_by(month = month(date), year =year(date), tod) %>% 
+  summarize(wind_speed = mean(wind_speed)) %>% 
+  group_by(year, tod) %>% 
+  summarize(wind_speed = mean(wind_speed))
+
+winds_diurnal <- rbind(speed_year %>% 
+                         group_by(tod) %>% 
+                         summarize(wind = mean(wind_speed)) %>% 
+                         mutate(season = "Annual", .before = 1),
+                       speed_season %>% 
+                         group_by(season, tod) %>% 
+                         summarize(wind = mean(wind_speed)))
+
+#annual avg: 1941-2022
+annual_avg <- year_rh %>% 
+  group_by(tod) %>% 
+  summarize(rh = mean(avg_rh), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp),
+            ff = mean(ff)) %>% 
+  mutate(season = "Annual", .before = 1)
+
+#seasonal avg: 1941-2022
+seasonal_avg <- season_summary %>% 
+  group_by(season, tod) %>% 
+  summarize(rh = mean(avg_RH), 
+            dew = mean(avg_dew),
+            mr = mean(avg_mr),
+            temp = mean(avg_temp),
+            ff = mean(ff))
+
+avgs_diurnal <- rbind(annual_avg, seasonal_avg)  %>% 
+  full_join(winds_diurnal, by = c("season", "tod"))
+
+```
+
+# Table: Combine all averages
+```{r}
+all <- rbind(avgs %>% 
+  mutate(dataclass = "Annual"), 
+avgs_clear %>% 
+  mutate(dataclass = "Clear",
+         ff = NA, 
+         wind = NA),
+avgs_diurnal %>% 
+  rename(dataclass = tod))
+
+all <- all %>% 
+  mutate(season = factor(season, levels = c("Annual", "Winter", "Spring", "Summer", "Fall"))) %>% 
+  arrange(dataclass)
+```
+
+
+# Table Formatting
+```{r}
+avgs_table <- all %>% 
+  arrange(dataclass, season) %>% 
+  dplyr::select(!dataclass) %>% 
+  mutate(rh = format(round(rh, 1), nsmall = 1),
+         mr = format(round(mr, 5), nsmall = 5),
+         dew = format(round(dew, 1), nsmall = 1),
+         temp = format(round(temp, 1), nsmall = 1),
+         ff = format(round(ff, 3), nsmall = 3),
+         wind = format(round(wind, 1), nsmall = 1)) %>% 
+  rename("Relative Humidity (%)" = rh,
+         "Mixing ratio (g/kg)" = mr,
+         "Dewpoint (°C)" = dew,
+         "Temperature (°C)" = temp,
+         "Fog frequency" = ff,
+         "Wind Speed (mph)" = wind,
+         " " = season) %>% 
+  kbl(caption = "Averages over 1941-2022") %>% 
+  pack_rows("Overall", 1,5) %>% 
+  pack_rows("Clear", 6,10) %>% 
+  pack_rows("Day", 11,15) %>% 
+  pack_rows("Night", 16,20) %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+save_kable(avgs_table, file = "Figures/averages_all_table.pdf")
+
+```
+
+
+
+
