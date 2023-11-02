@@ -93,11 +93,9 @@ daily_avg <- hourly_wind_41_22 %>%
 #getting monthly wind speeds from daily
 monthly_avg <- daily_avg %>%
   filter(year >= 1941) %>% 
-  mutate(monyear = str_c(month, "-", year)) %>%
-  group_by(monyear) %>%
+  group_by(month, year) %>%
   summarize(wind_speed = mean(wind_speed), 
             .groups="drop") %>%
-  separate(monyear, into = c("month", "year"), sep = "-") %>%
   mutate(year = as.numeric(year),
          month = as.numeric(month))
 
@@ -192,7 +190,7 @@ year_plot_homogenized <- ggplot(data = yearly_avg_prehomog_homog, aes(x = year, 
   geom_point() +
   ylim(0,45) +
   labs (x = "Year", y = "Wind Speed (mph)", title="B. Homogenized") +
- # theme_classic() +
+ theme_minimal() +
   theme(legend.position = "none") +
   geom_vline(xintercept=1981, 
              linetype="dotted")
@@ -202,7 +200,7 @@ year_plot <- ggplot(data = yearly_avg_prehomog_homog, aes(x = year,
   geom_point() +
   ylim(0,45) +
   labs (x = "Year", y = "Wind Speed (mph)", title="A. Raw Data") +
-  #theme_classic() +
+  theme_minimal() +
   theme(legend.position = "none") +
   geom_vline(xintercept=1981, 
              linetype="dotted")

@@ -11,9 +11,6 @@ There are separate rmd files for other wind thresholds.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-#setwd("//wdc-fileserver/Staff/Summit/Interns/Naomi Lubkin/Wind and Humidity Climate Trends")
-library(here)
-here::here()
 library(dplyr)
 library(lubridate)
 library(gamlss)

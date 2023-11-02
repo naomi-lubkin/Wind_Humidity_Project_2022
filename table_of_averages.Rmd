@@ -355,7 +355,7 @@ avgs_table <- all %>%
   arrange(dataclass, season) %>% 
   dplyr::select(!dataclass) %>% 
   mutate(rh = format(round(rh, 1), nsmall = 1),
-         mr = format(round(mr, 5), nsmall = 5),
+         mr = format(round(mr, 1), nsmall = 1),
          dew = format(round(dew, 1), nsmall = 1),
          temp = format(round(temp, 1), nsmall = 1),
          ff = format(round(ff, 3), nsmall = 3),

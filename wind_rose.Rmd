@@ -26,7 +26,7 @@ library(RColorBrewer)
 #hourly speed and direction 1935-2021
 hourly_spd_dir <- read_csv("Data/b16-hourly wind speed plus direction 1935-2021.csv")
 wind_2022 <- read_csv("Data/2022_wind.csv") %>%
-  select(date, wind_speed, wind_direction)
+  dplyr::select(date, wind_speed, wind_direction)
 hourly_spd_dir <- rbind(hourly_spd_dir, wind_2022)
 
 date1 <- ymd_hms("1970-05-04 00:55:00")
@@ -138,6 +138,8 @@ wind_rose_81season <- windRose(hourly_since_1981, wd="dir", ws="wind_speed", typ
 wind_rose_81season
 
 wind_rose_seasonyear <- windRose(hourly_spd_dir_byyear, wd="dir", ws="wind_speed", type =  c("era", "season"), paddle= FALSE, annotate=FALSE, width=2, bias.corr = TRUE, key.position="left", normalize = FALSE, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100), key.header = "Wind Speed (mph)", key.footer = NULL)
+
+
 
 wind_rose_seasonyear
 ```

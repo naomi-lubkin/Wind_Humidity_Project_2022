@@ -105,7 +105,7 @@ a <- homogenized %>%
   summarize(avg_speed = mean(wind_speed), avg_homogen = mean (homogenized_wind)) %>% 
   ggplot(aes(x = year, y = avg_homogen))+ 
   geom_point() + 
-  ylim(20,45)
+  ylim(20,45) 
 b <- homogenized %>% 
   group_by(year) %>% 
   summarize(avg_speed = mean(wind_speed), avg_homogen = mean (homogenized_wind)) %>%   
